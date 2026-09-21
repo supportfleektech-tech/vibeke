@@ -1,0 +1,24 @@
+# KINARA — Docker ignore (keeps context small & secrets out)
+node_modules
+.next
+out
+build
+dist
+*.tsbuildinfo
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+.vercel
+.vscode
+.idea
+npm-debug.log*
+pnpm-debug.log*
+logs
+*.log
+coverage
+.nyc_output
+.DS_Store
+*.pem
+docker-compose.override.yml

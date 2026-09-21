@@ -1,8 +1,7 @@
 import { db } from "./index";
-import { users, posts, communities, marketplaceItems, businesses, messages, jobs, localRadar } from "./schema";
+import { users, posts, communities, marketplaceItems, businesses, messages, jobs, localRadar, threads, communityMembers } from "./schema";
 
 export async function seedDatabase() {
-  // Check if user already exists
   const existingUsers = await db.select().from(users);
   if (existingUsers.length > 0) {
     console.log("Database already seeded");
@@ -11,32 +10,98 @@ export async function seedDatabase() {
 
   console.log("Seeding Kinara sovereign platform database...");
 
-  // Primary logged-in user
-  await db.insert(users).values({
-    id: "usr_brian_mwangi",
-    name: "Brian Mwangi",
-    handle: "brianmwangi",
-    avatar: "https://images.pexels.com/photos/14950779/pexels-photo-14950779.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-    cover: "https://images.pexels.com/photos/29069329/pexels-photo-29069329.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
-    bio: "Product Architect & Design Systems Lead. Building sovereign digital platforms across Silicon Savannah, Lagos, and Kigali. Believer in high craft, offline-first systems, and African dignity in tech.",
-    role: "citizen",
-    location: "Nairobi, Kenya • Kilimani Hub",
-    trustScore: 98,
-    verified: true,
-    verificationType: "National ID + Biometric & Escrow Certified",
-    followersCount: 4890,
-    followingCount: 382,
-    marketplaceRating: "4.98",
-    skills: JSON.stringify(["Design Systems", "Distributed Systems", "FinTech Rails", "Swahili NLP", "Kinara Core", "Product Architecture"]),
-    achievements: JSON.stringify([
-      { title: "Silicon Savannah 40u40", desc: "Top innovators shaping East Africa", icon: "Award" },
-      { title: "M-Pesa Pioneer Fellow", desc: "100+ verified escrow transactions", icon: "ShieldCheck" },
-      { title: "Pan-African Speaker", desc: "Keynote at Afrotech Kigali 2025", icon: "Mic" },
-      { title: "Sovereign Builder", desc: "Top 0.1% platform contributor", icon: "Flame" }
-    ]),
-  });
+  // Users - need to insert all referenced authorIds before posts
+  // Also insert additional seeded users for posts
+  await db.insert(users).values([
+    {
+      id: "usr_brian_mwangi",
+      name: "Brian Mwangi",
+      handle: "brianmwangi",
+      avatar: "https://images.pexels.com/photos/14950779/pexels-photo-14950779.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      cover: "https://images.pexels.com/photos/29069329/pexels-photo-29069329.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      bio: "Product Architect & Design Systems Lead. Building sovereign digital platforms across Silicon Savannah, Lagos, and Kigali. Believer in high craft, offline-first systems, and African dignity in tech.",
+      role: "citizen",
+      location: "Nairobi, Kenya • Kilimani Hub",
+      trustScore: 98,
+      verified: true,
+      verificationType: "National ID + Biometric & Escrow Certified",
+      followersCount: 4890,
+      followingCount: 382,
+      marketplaceRating: "4.98",
+      skills: ["Design Systems", "Distributed Systems", "FinTech Rails", "Swahili NLP", "Kinara Core", "Product Architecture"],
+      achievements: [
+        { title: "Silicon Savannah 40u40", desc: "Top innovators shaping East Africa", icon: "Award" },
+        { title: "M-Pesa Pioneer Fellow", desc: "100+ verified escrow transactions", icon: "ShieldCheck" },
+        { title: "Pan-African Speaker", desc: "Keynote at Afrotech Kigali 2025", icon: "Mic" },
+        { title: "Sovereign Builder", desc: "Top 0.1% platform contributor", icon: "Flame" },
+      ],
+      preferences: { persona: "citizen", lowBandwidth: false },
+    },
+    {
+      id: "usr_amina_odhiambo",
+      name: "Amina Odhiambo",
+      handle: "amina_ux",
+      avatar: "https://images.pexels.com/photos/5999894/pexels-photo-5999894.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      cover: "https://images.pexels.com/photos/5999894/pexels-photo-5999894.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      bio: "UX Engineer & Frontend Craft Lead. Nairobi.",
+      role: "creator",
+      location: "Nairobi, Kenya",
+      trustScore: 97,
+      verified: true,
+      verificationType: "Biometric & Escrow Certified",
+      followersCount: 2100,
+      followingCount: 340,
+      marketplaceRating: "4.96",
+      skills: ["Figma", "React", "Design Tokens"],
+      achievements: [],
+      preferences: {},
+    },
+    {
+      id: "usr_kofi_mensah",
+      name: "Kofi Mensah",
+      handle: "kofi_sound",
+      avatar: "https://images.pexels.com/photos/15283143/pexels-photo-15283143.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      cover: "https://images.pexels.com/photos/5332445/pexels-photo-5332445.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      bio: "Sound Architect & Afrobeats producer. Accra.",
+      role: "creator",
+      location: "Accra, Ghana",
+      trustScore: 96,
+      verified: true,
+      verificationType: "Biometric & Escrow Certified",
+      followersCount: 3200,
+      followingCount: 210,
+      marketplaceRating: "4.94",
+      skills: ["Audio Engineering", "Live Production"],
+      achievements: [],
+      preferences: {},
+    },
+    {
+      id: "usr_folake_adebayo",
+      name: "Folake Adebayo",
+      handle: "folake_lagos",
+      avatar: "https://images.pexels.com/photos/1181695/pexels-photo-1181695.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      cover: "https://images.pexels.com/photos/1181695/pexels-photo-1181695.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      bio: "FinTech Founder, Lagos. Cross-border rails.",
+      role: "business",
+      location: "Lagos, Nigeria",
+      trustScore: 99,
+      verified: true,
+      verificationType: "Biometric & Escrow Certified",
+      followersCount: 5400,
+      followingCount: 120,
+      marketplaceRating: "4.99",
+      skills: ["FinTech", "Smart Contracts"],
+      achievements: [],
+      preferences: {},
+    },
+  ]);
 
-  // Posts
+  await db.insert(threads).values([
+    { id: "th_folake", title: "Lagos-Nairobi Corridor", participants: ["usr_brian_mwangi", "usr_folake_adebayo"], type: "direct" },
+    { id: "th_zuri_seller", title: "Zuri Leatherworks", participants: ["usr_brian_mwangi", "zuri_seller"], type: "marketplace" },
+    { id: "th_community_silicon", title: "Silicon Savannah", participants: ["usr_brian_mwangi"], type: "community" },
+  ]);
+
   await db.insert(posts).values([
     {
       authorId: "usr_brian_mwangi",
@@ -49,11 +114,11 @@ export async function seedDatabase() {
       category: "trending",
       city: "Nairobi",
       likes: 842,
-      commentsCount: 67,
+      commentsCount: 2,
       sharesCount: 184,
       mediaUrl: "https://images.pexels.com/photos/29069344/pexels-photo-29069344.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
       mediaType: "image",
-      tags: JSON.stringify(["SovereignTech", "AfricanDesign", "SiliconSavannah", "DesignSystems"]),
+      tags: ["SovereignTech", "AfricanDesign", "SiliconSavannah", "DesignSystems"],
       pinned: true,
     },
     {
@@ -67,11 +132,11 @@ export async function seedDatabase() {
       category: "innovation",
       city: "Nairobi",
       likes: 615,
-      commentsCount: 42,
+      commentsCount: 1,
       sharesCount: 93,
       mediaUrl: null,
       mediaType: "text",
-      tags: JSON.stringify(["EdgeComputing", "LowBandwidth", "KenyanEngineering", "KinaraCore"]),
+      tags: ["EdgeComputing", "LowBandwidth", "KenyanEngineering", "KinaraCore"],
       pinned: false,
     },
     {
@@ -85,11 +150,11 @@ export async function seedDatabase() {
       category: "culture",
       city: "Accra",
       likes: 529,
-      commentsCount: 38,
+      commentsCount: 0,
       sharesCount: 112,
       mediaUrl: "https://images.pexels.com/photos/5332445/pexels-photo-5332445.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
       mediaType: "image",
-      tags: JSON.stringify(["Afrobeats", "SoundLounge", "AccraVibes", "LiveAudio"]),
+      tags: ["Afrobeats", "SoundLounge", "AccraVibes", "LiveAudio"],
       pinned: false,
     },
     {
@@ -103,16 +168,15 @@ export async function seedDatabase() {
       category: "business",
       city: "Lagos",
       likes: 912,
-      commentsCount: 88,
+      commentsCount: 1,
       sharesCount: 247,
       mediaUrl: null,
       mediaType: "text",
-      tags: JSON.stringify(["FinTech", "PanAfricanTrade", "EscrowTrust", "LagosTech"]),
+      tags: ["FinTech", "PanAfricanTrade", "EscrowTrust", "LagosTech"],
       pinned: false,
-    }
+    },
   ]);
 
-  // Communities
   await db.insert(communities).values([
     {
       id: "silicon-savannah",
@@ -128,12 +192,13 @@ export async function seedDatabase() {
       voiceSpeakersCount: 8,
       voiceRoomTopic: "AI Agents & Autonomous M-Pesa Micro-rails in Production",
       city: "Nairobi",
-      rules: JSON.stringify([
+      rules: [
         "Respect intellectual property and open-source contributions",
         "High signal-to-noise: share code, architecture, or verified data",
         "Support junior builders across the continent",
-        "Zero spam, aggressive pitching or unverified tokens"
-      ]),
+        "Zero spam, aggressive pitching or unverified tokens",
+      ],
+      createdBy: "usr_brian_mwangi",
     },
     {
       id: "afrobeats-sound",
@@ -149,7 +214,8 @@ export async function seedDatabase() {
       voiceSpeakersCount: 5,
       voiceRoomTopic: "Amapiano x Gengetone Bass Architecture Masterclass",
       city: "Pan-African",
-      rules: JSON.stringify(["Credit producers and lyricists", "Share stems in lossless format", "Be kind"]),
+      rules: ["Credit producers and lyricists", "Share stems in lossless format", "Be kind"],
+      createdBy: "usr_kofi_mensah",
     },
     {
       id: "agri-futures",
@@ -165,7 +231,8 @@ export async function seedDatabase() {
       voiceSpeakersCount: 0,
       voiceRoomTopic: null,
       city: "Rift Valley / Kigali",
-      rules: JSON.stringify(["Practical agricultural telemetry only", "Open data sharing"]),
+      rules: ["Practical agricultural telemetry only", "Open data sharing"],
+      createdBy: "usr_brian_mwangi",
     },
     {
       id: "creatives-africa",
@@ -181,11 +248,17 @@ export async function seedDatabase() {
       voiceSpeakersCount: 4,
       voiceRoomTopic: "Typography Critique: Ge'ez glyphs in modern Apple/Figma style",
       city: "Addis Ababa / Nairobi",
-      rules: JSON.stringify(["Constructive critique only", "No AI image spam without process notes"]),
-    }
+      rules: ["Constructive critique only", "No AI image spam without process notes"],
+      createdBy: "usr_brian_mwangi",
+    },
   ]);
 
-  // Marketplace Items
+  await db.insert(communityMembers).values([
+    { communityId: "silicon-savannah", userId: "usr_brian_mwangi", role: "admin" },
+    { communityId: "silicon-savannah", userId: "usr_amina_odhiambo", role: "member" },
+    { communityId: "afrobeats-sound", userId: "usr_kofi_mensah", role: "admin" },
+  ]);
+
   await db.insert(marketplaceItems).values([
     {
       title: "Handcrafted Rift Valley Saddle-Leather Weekender",
@@ -194,6 +267,7 @@ export async function seedDatabase() {
       currency: "KES",
       category: "Craft & Fashion",
       image: "https://images.pexels.com/photos/27680730/pexels-photo-27680730.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      sellerId: "usr_brian_mwangi",
       sellerName: "Zuri Leatherworks",
       sellerAvatar: "https://images.pexels.com/photos/29038453/pexels-photo-29038453.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
       sellerTrustScore: 99,
@@ -215,6 +289,7 @@ export async function seedDatabase() {
       currency: "KES",
       category: "Art & Decor",
       image: "https://images.pexels.com/photos/27556617/pexels-photo-27556617.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      sellerId: "usr_amina_odhiambo",
       sellerName: "Imigongo Atelier",
       sellerAvatar: "https://images.pexels.com/photos/32203753/pexels-photo-32203753.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
       sellerTrustScore: 97,
@@ -236,6 +311,7 @@ export async function seedDatabase() {
       currency: "KES",
       category: "Electronics",
       image: "https://images.pexels.com/photos/7279329/pexels-photo-7279329.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
+      sellerId: "usr_brian_mwangi",
       sellerName: "Alpha Tech Hub Westlands",
       sellerAvatar: "https://images.pexels.com/photos/9490631/pexels-photo-9490631.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
       sellerTrustScore: 99,
@@ -257,6 +333,7 @@ export async function seedDatabase() {
       currency: "KES",
       category: "Solar & Clean Tech",
       image: "https://images.pexels.com/photos/29069344/pexels-photo-29069344.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      sellerId: "usr_kofi_mensah",
       sellerName: "Kilima Energy Systems",
       sellerAvatar: "https://images.pexels.com/photos/13222553/pexels-photo-13222553.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
       sellerTrustScore: 98,
@@ -278,6 +355,7 @@ export async function seedDatabase() {
       currency: "KES",
       category: "Gourmet & Food",
       image: "https://images.pexels.com/photos/8936937/pexels-photo-8936937.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      sellerId: "usr_folake_adebayo",
       sellerName: "Kawi Roastery Kilimani",
       sellerAvatar: "https://images.pexels.com/photos/8937358/pexels-photo-8937358.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
       sellerTrustScore: 100,
@@ -291,10 +369,9 @@ export async function seedDatabase() {
       featured: false,
       rating: "4.98",
       reviewsCount: 89,
-    }
+    },
   ]);
 
-  // Businesses
   await db.insert(businesses).values([
     {
       id: "biz_ikigai_nairobi",
@@ -310,16 +387,17 @@ export async function seedDatabase() {
       reviewsCount: 184,
       verified: true,
       openHours: "07:00 AM - 10:00 PM Daily",
-      services: JSON.stringify([
+      services: [
         { name: "Day Pass + Single-Origin Coffee", price: "KES 1,500 / day" },
         { name: "Private Acoustic Sound Pod (2 hrs)", price: "KES 2,400" },
         { name: "Executive 12-Seat Boardroom with 4K Studio", price: "KES 8,000 / hr" },
-        { name: "Direct Trade Micro-lot Coffee Bag (250g)", price: "KES 950" }
-      ]),
+        { name: "Direct Trade Micro-lot Coffee Bag (250g)", price: "KES 950" },
+      ],
       catalogCount: 16,
       monthlyTransactions: 1240,
       phone: "+254 711 982 400",
       website: "https://ikigai.ke",
+      ownerId: "usr_brian_mwangi",
     },
     {
       id: "biz_mara_creative",
@@ -335,56 +413,55 @@ export async function seedDatabase() {
       reviewsCount: 92,
       verified: true,
       openHours: "08:30 AM - 06:30 PM (Mon-Fri)",
-      services: JSON.stringify([
+      services: [
         { name: "Design System Audit & Token Architecture", price: "Custom Engagement" },
         { name: "Mobile App Tactile UI Sprint (3 Weeks)", price: "From KES 450,000" },
-        { name: "African Typography Custom Font Family", price: "From KES 280,000" }
-      ]),
+        { name: "African Typography Custom Font Family", price: "From KES 280,000" },
+      ],
       catalogCount: 8,
       monthlyTransactions: 34,
       phone: "+254 722 550 190",
       website: "https://mara.design",
-    }
+      ownerId: "usr_amina_odhiambo",
+    },
   ]);
 
-  // Messages (conversations)
   await db.insert(messages).values([
     {
       threadId: "th_folake",
+      senderId: "usr_folake_adebayo",
       senderName: "Folake Adebayo",
       senderAvatar: "https://images.pexels.com/photos/1181695/pexels-photo-1181695.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
       senderRole: "FinTech Founder, Lagos",
       text: "Brian, the escrow smart contract for the Lagos-Nairobi trade corridor is deployed on the testnet. Can you review the multi-sig approval flow?",
-      timestamp: "10:14 AM",
       isMe: false,
       type: "text",
       metadata: null,
     },
     {
       threadId: "th_folake",
+      senderId: "usr_brian_mwangi",
       senderName: "Brian Mwangi",
       senderAvatar: "https://images.pexels.com/photos/14950779/pexels-photo-14950779.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
       senderRole: "Product Architect",
       text: "Reviewed! The timeout fallback is clean. I've sent a 15-second audio breakdown of the UI state transitions for when M-Pesa or NIBSS has network latency.",
-      timestamp: "10:18 AM",
       isMe: true,
       type: "voice",
-      metadata: JSON.stringify({ duration: "0:15", waveform: [40, 65, 80, 50, 95, 70, 30, 85, 90, 60, 45, 80, 75, 55, 30] }),
+      metadata: { duration: "0:15", waveform: [40, 65, 80, 50, 95, 70, 30, 85, 90, 60, 45, 80, 75, 55, 30] },
     },
     {
       threadId: "th_zuri_seller",
+      senderId: null,
       senderName: "Zuri Leatherworks",
       senderAvatar: "https://images.pexels.com/photos/29038453/pexels-photo-29038453.jpeg?auto=compress&cs=tinysrgb&dpr=1&fit=crop&h=200&w=280",
       senderRole: "Verified Artisan Seller",
       text: "Habari Brian! Your custom monogrammed Saddle-Leather Weekender is finished and packaged in dust cloth. Boda courier is on standby in Kilimani.",
-      timestamp: "11:30 AM",
       isMe: false,
       type: "offer",
-      metadata: JSON.stringify({ item: "Handcrafted Saddle-Leather Weekender", price: "KES 14,500", status: "Escrow Ready" }),
-    }
+      metadata: { item: "Handcrafted Saddle-Leather Weekender", price: "KES 14,500", status: "Escrow Ready" },
+    },
   ]);
 
-  // Jobs
   await db.insert(jobs).values([
     {
       title: "Lead Design Systems Architect",
@@ -394,8 +471,7 @@ export async function seedDatabase() {
       type: "Full-Time",
       salary: "KES 380,000 - 520,000 / mo",
       category: "Design & UX",
-      tags: JSON.stringify(["Design Systems", "Figma Tokens", "React", "Mobile First"]),
-      postedAt: "2 hours ago",
+      tags: ["Design Systems", "Figma Tokens", "React", "Mobile First"],
     },
     {
       title: "Senior Low-Latency Rust Engineer (Offline Edge)",
@@ -405,8 +481,7 @@ export async function seedDatabase() {
       type: "Full-Time",
       salary: "$3,800 - $5,500 / mo",
       category: "Engineering",
-      tags: JSON.stringify(["Rust", "WASM", "Distributed DB", "Offline-First"]),
-      postedAt: "5 hours ago",
+      tags: ["Rust", "WASM", "Distributed DB", "Offline-First"],
     },
     {
       title: "Pan-African Growth & Community Lead",
@@ -416,12 +491,10 @@ export async function seedDatabase() {
       type: "Full-Time",
       salary: "KES 240,000 - 320,000 / mo",
       category: "Operations",
-      tags: JSON.stringify(["Ecosystem", "Hackathons", "Audio Rooms", "Founders"]),
-      postedAt: "1 day ago",
-    }
+      tags: ["Ecosystem", "Hackathons", "Audio Rooms", "Founders"],
+    },
   ]);
 
-  // Local Radar Pins
   await db.insert(localRadar).values([
     {
       type: "friend",
@@ -432,6 +505,7 @@ export async function seedDatabase() {
       lat: "-1.2921",
       lng: "36.7850",
       distance: "0.4 km away",
+      distanceKm: "0.4",
       details: "Working from Java House Argwings • Free for coffee until 4 PM",
       status: "Active Now",
     },
@@ -444,6 +518,7 @@ export async function seedDatabase() {
       lat: "-1.2650",
       lng: "36.8040",
       distance: "2.1 km away",
+      distanceKm: "2.1",
       details: "Specialty coffee roastery, 1Gbps mesh wifi, acoustic pods",
       status: "Verified Open (Quiet)",
     },
@@ -456,6 +531,7 @@ export async function seedDatabase() {
       lat: "-1.2880",
       lng: "36.7910",
       distance: "1.1 km away",
+      distanceKm: "1.1",
       details: "Live demos, founder pitches, and rooftop networking. 180 RSVP'd",
       status: "Starts at 6:30 PM",
     },
@@ -468,6 +544,7 @@ export async function seedDatabase() {
       lat: "-1.2910",
       lng: "36.7880",
       distance: "0.8 km away",
+      distanceKm: "0.8",
       details: "Flash perk for Kinara verified members on today's roast",
       status: "Valid Today Only",
     },
@@ -480,10 +557,11 @@ export async function seedDatabase() {
       lat: "-1.2950",
       lng: "36.7820",
       distance: "1.2 km away",
+      distanceKm: "1.2",
       details: "Available for instant 30-min Boda courier pickup or view in person",
       status: "In Stock (1 Left)",
-    }
+    },
   ]);
 
-  console.log("Database seeded successfully with Kinara platform data!");
+  console.log("Database seeded successfully with Kinara sovereign platform data!");
 }

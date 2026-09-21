@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   Sparkles,
@@ -92,14 +94,12 @@ export function PostComposer({ user, onPostCreated, selectedCity }: PostComposer
   return (
     <div className="kinara-card rounded-2xl p-4 border border-emerald-500/20 shadow-lg relative overflow-hidden bg-gradient-to-b from-[#0c1817] to-[#081211]">
       <div className="flex items-start gap-3">
-        <img
-          src={
+        <Image src={
             user?.avatar ||
             "https://images.pexels.com/photos/14950779/pexels-photo-14950779.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
           }
           alt="Brian Mwangi"
-          className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 shrink-0"
-        />
+          className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 shrink-0" width={40} height={40} unoptimized loading="lazy" />
 
         <div className="flex-1 min-w-0">
           <textarea
@@ -113,7 +113,7 @@ export function PostComposer({ user, onPostCreated, selectedCity }: PostComposer
           {/* Media preview if added */}
           {mediaUrl && (
             <div className="relative mt-2 mb-3 rounded-xl overflow-hidden border border-emerald-950/80 max-h-48 group">
-              <img src={mediaUrl} alt="Attached" className="w-full h-48 object-cover" />
+              <Image src={mediaUrl} alt="Attached" className="w-full h-48 object-cover" width={1200} height={600} unoptimized loading="lazy" sizes="100vw" />
               <button
                 onClick={() => setMediaUrl(null)}
                 className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white p-1 rounded-lg text-xs"

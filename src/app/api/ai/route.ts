@@ -1,55 +1,207 @@
 import { NextResponse } from "next/server";
+import { aiSchema } from "@/lib/validators";
+import { rateLimit, getClientIp } from "@/lib/ratelimit";
+import { env, hasAiKey, getAiProvider } from "@/lib/env";
+
+export const dynamic = "force-dynamic";
+
+function getSystemPrompt(action: string, targetLanguage?: string): string {
+  switch (action) {
+    case "rewrite":
+      return "You are Kinara Sovereign Editor. Rewrite the user's text to be vivid, African-centered, high-craft and concise while preserving meaning. Return only the rewritten text, no preamble.";
+    case "summarize":
+      return "You are Kinara AI Summarizer. Summarize the user's text into 3 bullet points: Core Thesis, Impact, Action Item. Be concise, sovereign, and precise.";
+    case "translate":
+      return `You are a pan-African translator. Translate the user's text into ${targetLanguage || "swahili"} (support: swahili/kiswahili, yoruba, amharic, zulu, french). Keep tone dignified and African-centered. If language unknown, translate as best as possible. Return only translation prefixed with [Language]:`;
+    case "sheng":
+      return "You are a Nairobi Sheng expert. Convert the user's text into vibrant Sheng (Nairobi street slang) with emojis 🇰🇪🔥. Keep meaning but use authentic Sheng vocabulary.";
+    case "professional":
+      return "You are a senior African business strategist. Rewrite the user's text to be institutional, rigorous, and professional for B2B/enterprise audience. Keep under 4 sentences.";
+    case "pitch":
+      return "You are a Pan-African founder pitch coach. Transform the user's idea into a compelling 3-4 sentence venture pitch highlighting Africa's 1.4B market, youth dividend, and sovereign tech opportunity.";
+    case "continue":
+      return "You are Kinara's thought partner. Continue the user's thought with 2-3 sentences about offline-first edge tech, M-Pesa/mobile money rails, and empowering African creators/enterprises. Be inspiring and concrete.";
+    case "emojis":
+      return "Add tasteful, relevant emojis to the user's text without changing words. Add 3-4 emojis at end as well. Keep original text intact.";
+    case "price_check":
+      return `You are Kinara Price & Trust oracle. Evaluate the listing title/context the user provides. Return a JSON object ONLY with fields: verdict (string), marketAverage (string e.g., "KES 16,500"), confidenceScore (string %), riskFactor (string), summary (string 1-2 sentences), advice (string). Base it on Nairobi & East Africa market logic. No markdown, only raw JSON.`;
+    case "copilot":
+      return "You are Kinara Sovereign Copilot — an AI assistant for Africa's tech ecosystem. Answer questions about M-Pesa, NIBSS, Lagos, Nairobi Silicon Savannah, pan-African trade, and Kinara platform features. Be helpful, concise (under 5 sentences), and pridefully African.";
+    default:
+      return "You are Kinara Sovereign AI — helpful, precise, and African-centered. Process the user's request elegantly.";
+  }
+}
+
+function buildUserContent(action: string, text: string, context?: any, targetLanguage?: string): string {
+  if (action === "translate" && targetLanguage) {
+    return `Translate this to ${targetLanguage}: "${text}"`;
+  }
+  if (action === "price_check") {
+    const ctxStr = context ? ` Context: ${typeof context === "string" ? context : JSON.stringify(context)}` : "";
+    return `Listing title: "${text}"${ctxStr}`;
+  }
+  if (action === "copilot") {
+    return text || "Hello";
+  }
+  return text;
+}
+
+async function callOpenRouter(
+  action: string,
+  text: string,
+  context: any,
+  targetLanguage: string | undefined,
+  model: string,
+  apiKey: string,
+  provider: "openrouter" | "openai"
+): Promise<{ result: any; model: string } | null> {
+  const systemPrompt = getSystemPrompt(action, targetLanguage);
+  const userContent = buildUserContent(action, text, context, targetLanguage);
+
+  const url =
+    provider === "openrouter"
+      ? "https://openrouter.ai/api/v1/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+  if (provider === "openrouter") {
+    headers["HTTP-Referer"] = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    headers["X-Title"] = "Kinara Sovereign Platform";
+  }
+
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+    temperature: action === "price_check" ? 0.3 : 0.7,
+    max_tokens: 800,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.warn(`AI provider ${provider} error ${res.status}:`, errText.slice(0, 500));
+      return null;
+    }
+
+    const data = await res.json();
+    const content: string = data?.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!content) return null;
+
+    // For price_check, try to parse as JSON object
+    if (action === "price_check") {
+      try {
+        // Handle markdown code fences if present
+        const cleaned = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+        const parsed = JSON.parse(cleaned);
+        return { result: parsed, model };
+      } catch {
+        // Fallback: return raw content as string wrapped in object
+        return { result: content, model };
+      }
+    }
+
+    return { result: content, model };
+  } catch (err) {
+    clearTimeout(timeout);
+    console.warn("AI provider fetch failed, falling back to stub:", (err as Error).message);
+    return null;
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { action, text, context, targetLanguage } = body;
+    const ip = getClientIp(request);
+    const rl = rateLimit(`ai:${ip}`, 20, 60_000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit exceeded. Try again soon. (20/min)" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil((rl.reset - Date.now()) / 1000)) } }
+      );
+    }
 
-    let result = "";
+    const body = await request.json().catch(() => ({}));
+    const parsed = aiSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { action, text, context, targetLanguage } = parsed.data;
+    const safeText = (text || "").toString();
+    const provider = getAiProvider();
+    const model = env.AI_MODEL || "openai/gpt-4o-mini";
+
+    // Try real AI if key configured
+    if (hasAiKey()) {
+      const apiKey = provider === "openrouter" ? env.OPENROUTER_API_KEY! : env.OPENAI_API_KEY!;
+      const aiResult = await callOpenRouter(action, safeText, context, targetLanguage, model, apiKey, provider as any);
+      if (aiResult) {
+        return NextResponse.json({
+          success: true,
+          action,
+          result: aiResult.result,
+          model: aiResult.model,
+        });
+      }
+      // Fall through to stub if provider failed
+    }
+
+    // Fallback stubs (existing behavior)
+    let result: any = "";
 
     switch (action) {
       case "rewrite":
-        result = rewriteText(text);
+        result = rewriteText(safeText);
         break;
-
       case "summarize":
-        result = summarizeText(text);
+        result = summarizeText(safeText);
         break;
-
       case "translate":
-        result = translateAfrican(text, targetLanguage || "swahili");
+        result = translateAfrican(safeText, targetLanguage || "swahili");
         break;
-
       case "sheng":
-        result = convertToSheng(text);
+        result = convertToSheng(safeText);
         break;
-
       case "professional":
-        result = makeProfessional(text);
+        result = makeProfessional(safeText);
         break;
-
       case "pitch":
-        result = makeFounderPitch(text);
+        result = makeFounderPitch(safeText);
         break;
-
       case "continue":
-        result = continueThought(text);
+        result = continueThought(safeText);
         break;
-
       case "emojis":
-        result = addTastefulEmojis(text);
+        result = addTastefulEmojis(safeText);
         break;
-
       case "price_check":
-        result = evaluatePriceAndTrust(text, context);
+        result = evaluatePriceAndTrust(safeText, context);
         break;
-
       case "copilot":
-        result = answerCopilot(text);
+        result = answerCopilot(safeText);
         break;
-
       default:
-        result = `Kinara AI processed: "${text}" with sovereign precision.`;
+        result = `Kinara AI processed: "${safeText}" with sovereign precision.`;
     }
 
     return NextResponse.json({
@@ -60,7 +212,7 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("AI error:", err);
-    return NextResponse.json({ error: "Failed to process AI request" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Failed to process AI request" }, { status: 500 });
   }
 }
 

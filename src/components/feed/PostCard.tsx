@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   Heart,
@@ -114,11 +116,9 @@ export function PostCard({ post, onPostUpdated, onNavigateProfile }: PostCardPro
           className="flex items-center gap-3 cursor-pointer group"
         >
           <div className="relative">
-            <img
-              src={post.authorAvatar}
+            <Image src={post.authorAvatar}
               alt={post.authorName}
-              className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 group-hover:ring-emerald-400 transition"
-            />
+              className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 group-hover:ring-emerald-400 transition" width={40} height={40} unoptimized loading="lazy" />
             {post.authorVerified && (
               <span
                 className="absolute -bottom-1 -right-1 bg-[#060b0b] rounded-full p-0.5"
@@ -178,12 +178,10 @@ export function PostCard({ post, onPostUpdated, onNavigateProfile }: PostCardPro
         {/* Media if present */}
         {post.mediaUrl && (
           <div className="mt-3 rounded-xl overflow-hidden border border-white/10 group bg-black/40">
-            <img
-              src={post.mediaUrl}
+            <Image src={post.mediaUrl}
               alt="Post attachment"
               className="w-full max-h-96 object-cover transition duration-300 group-hover:scale-[1.01]"
-              loading="lazy"
-            />
+              loading="lazy" width={600} height={400} unoptimized sizes="100vw" />
           </div>
         )}
 

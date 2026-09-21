@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React from "react";
 import { X, Sparkles, ShieldCheck, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { MarketplaceProduct } from "@/types";
@@ -49,11 +51,9 @@ export function AIPriceCheckModal({
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Target item snippet */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-black/40 border border-white/5">
-            <img
-              src={product.image}
+            <Image src={product.image}
               alt={product.title}
-              className="w-14 h-14 rounded-xl object-cover shrink-0"
-            />
+              className="w-14 h-14 rounded-xl object-cover shrink-0" width={56} height={56} unoptimized loading="lazy" />
             <div className="min-w-0 flex-1">
               <h4 className="text-xs font-bold text-white truncate">{product.title}</h4>
               <div className="text-xs font-mono font-bold text-amber-400">

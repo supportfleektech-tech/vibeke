@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# Prevent duplicate runs; cancel superseded
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/kinara_db
+          NEXTAUTH_SECRET: ci-test-secret-kinara-32-chars-minimum-for-testing
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Build
+        run: pnpm build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/kinara_db
+          NEXTAUTH_SECRET: ci-test-secret-kinara-32-chars-minimum-for-testing
+          NEXTAUTH_URL: http://localhost:3000
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      # Health smoke — start the built app and probe /api/health
+      # DB is absent in CI by default, so health is expected to return 500
+      # when DB unavailable; we just verify the app boots and responds.
+      - name: Health check (smoke)
+        run: |
+          set -e
+          echo "Starting Next.js for health smoke test..."
+          DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/kinara_db \
+          NEXTAUTH_SECRET=ci-test-secret-kinara-32-chars-minimum-for-testing \
+          NEXTAUTH_URL=http://localhost:3000 \
+          pnpm start > /tmp/next.log 2>&1 &
+          APP_PID=$!
+          echo "PID=$APP_PID"
+
+          # Wait up to 30s for app to bind
+          for i in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/tmp/health.json 2>&1; then
+              echo "Health endpoint responded on attempt $i"
+              cat /tmp/health.json
+              break
+            fi
+            echo "Waiting for app... attempt $i"
+            sleep 2
+          done
+
+          # Show response (ok true if DB was available, ok false if not — both prove boot)
+          cat /tmp/health.json || echo "(no health.json — checking log)"
+          cat /tmp/next.log | tail -n 100 || true
+
+          # Require HTTP response (5xx is acceptable when DB down; ensures Next didn't crash)
+          HTTP_CODE=$(curl -s -o /tmp/body.json -w "%{http_code}" http://127.0.0.1:3000/api/health || echo "000")
+          echo "Health HTTP code: $HTTP_CODE"
+          cat /tmp/body.json || true
+
+          # Clean up
+          kill $APP_PID || true
+          sleep 2
+          kill -9 $APP_PID 2>/dev/null || true
+
+          # Fail only if app did not respond at all
+          if [ "$HTTP_CODE" = "000" ]; then
+            echo "::error::Health endpoint did not respond"
+            exit 1
+          fi
+
+          echo "Health smoke passed (HTTP $HTTP_CODE)"
+
+      - name: Upload health artifact (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-health-logs
+          path: |
+            /tmp/next.log
+            /tmp/health.json
+            /tmp/body.json
+          if-no-files-found: ignore
+
+  # Optional: docker build verification (runs in parallel, fast thanks to layer cache)
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t kinara:test .
+
+      - name: Image size
+        run: docker images kinara:test --format '{{.Size}}'

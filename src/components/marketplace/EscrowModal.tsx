@@ -1,8 +1,11 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import { X, ShieldCheck, Check, Truck, MapPin, Smartphone, CreditCard, Lock, Loader2 } from "lucide-react";
 import { MarketplaceProduct } from "@/types";
+import { toast } from "sonner";
 
 interface EscrowModalProps {
   isOpen: boolean;
@@ -39,8 +42,8 @@ export function EscrowModal({ isOpen, onClose, product, onSuccess }: EscrowModal
       setTimeout(() => {
         onSuccess(ref);
       }, 1600);
-    } catch {
-      alert("Error initiating escrow transaction.");
+    } catch (e: any) {
+      toast.error(e?.message || "Error initiating escrow transaction.");
     } finally {
       setIsProcessing(false);
     }
@@ -87,11 +90,10 @@ export function EscrowModal({ isOpen, onClose, product, onSuccess }: EscrowModal
           <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
             {/* Item summary */}
             <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-black/40 border border-white/5">
-              <img
-                src={product.image}
+              <Image src={product.image}
                 alt={product.title}
-                className="w-16 h-16 rounded-xl object-cover shrink-0"
-              />
+                loading="lazy"
+                className="w-16 h-16 rounded-xl object-cover shrink-0" width={64} height={64} unoptimized />
               <div className="min-w-0 flex-1">
                 <h4 className="text-xs font-bold text-white truncate">{product.title}</h4>
                 <div className="text-sm font-mono font-bold text-amber-400 mt-0.5">

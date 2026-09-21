@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Search,
   Sparkles,
@@ -16,6 +16,7 @@ import {
   Sun,
   Palette
 } from "lucide-react";
+import Image from "next/image";
 import { PersonaRole, UserProfile } from "@/types";
 
 interface HeaderProps {
@@ -64,11 +65,33 @@ export function Header({
 }: HeaderProps) {
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
   const [personaDropdownOpen, setPersonaDropdownOpen] = useState(false);
+  const cityRef = useRef<HTMLDivElement>(null);
+  const personaRef = useRef<HTMLDivElement>(null);
 
   const activeCityData = AFRICAN_CITIES.find((c) => c.name.toLowerCase() === selectedCity.toLowerCase()) || AFRICAN_CITIES[0];
 
+  // Outside-click close + Escape handling for both dropdowns
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (cityRef.current && !cityRef.current.contains(e.target as Node)) setCityDropdownOpen(false);
+      if (personaRef.current && !personaRef.current.contains(e.target as Node)) setPersonaDropdownOpen(false);
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setCityDropdownOpen(false);
+        setPersonaDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-emerald-950/60 bg-[#060c0c]/85">
+    <header className="sticky top-0 z-40 w-full glass-panel border-b border-emerald-950/60 bg-[#060c0c]/85" role="banner">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile Menu + Logo */}
         <div className="flex items-center gap-3">
@@ -77,14 +100,20 @@ export function Header({
               onClick={onToggleSidebarMobile}
               className="md:hidden p-2 text-slate-300 hover:text-white rounded-lg hover:bg-white/5"
               aria-label="Toggle navigation"
+              aria-expanded={undefined}
+              aria-controls="mobile-sidebar"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5" aria-hidden />
             </button>
           )}
 
           <div
             onClick={() => onNavigate("home")}
             className="flex items-center gap-2.5 cursor-pointer group select-none"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && onNavigate("home")}
+            aria-label="Go to home"
           >
             {/* Kinara African Apex Glyph */}
             <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 via-emerald-700 to-amber-600 p-[1.5px] shadow-lg shadow-emerald-950/50 group-hover:shadow-emerald-500/20 transition">
@@ -92,14 +121,14 @@ export function Header({
                 <span className="font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-300 via-emerald-100 to-amber-300 text-lg tracking-tighter">
                   K
                 </span>
-                <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/10 to-transparent pointer-events-none" aria-hidden />
               </div>
             </div>
 
             <div className="flex flex-col">
               <span className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5 font-sans">
                 KINARA
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden />
               </span>
               <span className="text-[10px] tracking-wider uppercase font-semibold text-emerald-400/80 -mt-1 hidden sm:block">
                 Sovereign Platform
@@ -112,13 +141,14 @@ export function Header({
         <div className="flex-1 max-w-md mx-2 hidden sm:block">
           <button
             onClick={onOpenSearch}
-            className="w-full h-9 px-3.5 bg-black/40 hover:bg-black/60 border border-emerald-950/70 hover:border-emerald-500/40 rounded-xl flex items-center justify-between text-xs text-slate-400 transition group shadow-inner"
+            className="w-full min-h-11 px-3.5 bg-black/40 hover:bg-black/60 border border-emerald-950/70 hover:border-emerald-500/40 rounded-xl flex items-center justify-between text-xs text-slate-400 transition group shadow-inner touch-target"
+            aria-label="Open universal search"
           >
             <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-emerald-400 group-hover:text-emerald-300 transition" />
+              <Search className="w-3.5 h-3.5 text-emerald-400 group-hover:text-emerald-300 transition" aria-hidden />
               <span>Search people, communities, products or ask AI...</span>
             </div>
-            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[10px] bg-emerald-950/50 text-emerald-300 rounded border border-emerald-800/40 font-mono">
+            <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[10px] bg-emerald-950/50 text-emerald-300 rounded border border-emerald-800/40 font-mono" aria-hidden>
               ⌘K
             </kbd>
           </button>
@@ -129,40 +159,45 @@ export function Header({
           {/* Mobile search button */}
           <button
             onClick={onOpenSearch}
-            className="sm:hidden p-2 text-slate-300 hover:text-white rounded-lg hover:bg-white/5"
+            className="sm:hidden min-h-11 min-w-11 p-2 text-slate-300 hover:text-white rounded-lg hover:bg-white/5 flex items-center justify-center touch-target"
             aria-label="Search"
           >
-            <Search className="w-4 h-4 text-emerald-400" />
+            <Search className="w-4 h-4 text-emerald-400" aria-hidden />
           </button>
 
           {/* City Selector Dropdown */}
-          <div className="relative">
+          <div className="relative" ref={cityRef}>
             <button
               onClick={() => {
                 setCityDropdownOpen(!cityDropdownOpen);
                 setPersonaDropdownOpen(false);
               }}
-              className="h-8 px-2.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/30 flex items-center gap-1.5 text-xs text-slate-200 transition"
+              className="min-h-11 px-2.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/30 flex items-center gap-1.5 text-xs text-slate-200 transition touch-target"
+              aria-label={`Select city, current ${activeCityData.name}`}
+              aria-expanded={cityDropdownOpen}
+              aria-haspopup="menu"
+              aria-controls="city-menu"
             >
-              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <Globe className="w-3.5 h-3.5 text-emerald-400" aria-hidden />
               <span className="font-semibold">{activeCityData.name}</span>
               <span className="text-[10px] text-emerald-300/80 hidden lg:inline">{activeCityData.temp}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition ${cityDropdownOpen ? "rotate-180" : ""}`} aria-hidden />
             </button>
 
             {cityDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 glass-dropdown rounded-xl py-1 z-50 text-xs">
+              <div id="city-menu" role="menu" aria-label="Pan-African hubs" className="absolute right-0 mt-2 w-56 glass-dropdown rounded-xl py-1 z-50 text-xs shadow-2xl animate-in">
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80 border-b border-emerald-950">
                   Pan-African Hubs
                 </div>
                 {AFRICAN_CITIES.map((c) => (
                   <button
                     key={c.name}
+                    role="menuitem"
                     onClick={() => {
                       onSelectCity(c.name);
                       setCityDropdownOpen(false);
                     }}
-                    className={`w-full px-3 py-2 text-left flex items-center justify-between hover:bg-emerald-950/60 transition ${
+                    className={`w-full px-3 py-2 text-left flex items-center justify-between hover:bg-emerald-950/60 transition focus-visible:outline-none focus-visible:bg-emerald-950/40 ${
                       selectedCity.toLowerCase() === c.name.toLowerCase()
                         ? "text-emerald-300 bg-emerald-950/40 font-semibold"
                         : "text-slate-300"
@@ -180,39 +215,45 @@ export function Header({
           </div>
 
           {/* Adaptive Persona Switcher */}
-          <div className="relative">
+          <div className="relative" ref={personaRef}>
             <button
               onClick={() => {
                 setPersonaDropdownOpen(!personaDropdownOpen);
                 setCityDropdownOpen(false);
               }}
-              className="h-8 px-2.5 rounded-lg bg-gradient-to-r from-emerald-950/60 to-amber-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 flex items-center gap-1.5 text-xs text-white transition shadow-sm"
+              className="min-h-11 px-2.5 rounded-lg bg-gradient-to-r from-emerald-950/60 to-amber-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 flex items-center gap-1.5 text-xs text-white transition shadow-sm touch-target"
               title="Switch Adaptive UI Persona"
+              aria-label={`Switch persona, current ${PERSONA_LABELS[currentPersona].label}`}
+              aria-expanded={personaDropdownOpen}
+              aria-haspopup="menu"
+              aria-controls="persona-menu"
             >
-              <span className="text-xs">{PERSONA_LABELS[currentPersona].icon}</span>
+              <span className="text-xs" aria-hidden>{PERSONA_LABELS[currentPersona].icon}</span>
               <span className="font-semibold hidden md:inline">{PERSONA_LABELS[currentPersona].label}</span>
-              <ChevronDown className="w-3 h-3 text-amber-400" />
+              <ChevronDown className={`w-3 h-3 text-amber-400 transition ${personaDropdownOpen ? "rotate-180" : ""}`} aria-hidden />
             </button>
 
             {personaDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 glass-dropdown rounded-xl p-1.5 z-50 text-xs shadow-2xl">
+              <div id="persona-menu" role="menu" aria-label="Adaptive UI Mode" className="absolute right-0 mt-2 w-64 glass-dropdown rounded-xl p-1.5 z-50 text-xs shadow-2xl animate-in">
                 <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400 border-b border-white/10 mb-1">
                   Adaptive UI Mode
                 </div>
                 {(Object.keys(PERSONA_LABELS) as PersonaRole[]).map((role) => (
                   <button
                     key={role}
+                    role="menuitem"
                     onClick={() => {
                       onSelectPersona(role);
                       setPersonaDropdownOpen(false);
                     }}
-                    className={`w-full px-2.5 py-2 rounded-lg text-left flex items-start gap-2.5 hover:bg-white/5 transition ${
+                    className={`w-full px-2.5 py-2 rounded-lg text-left flex items-start gap-2.5 hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 ${
                       currentPersona === role
                         ? "bg-emerald-950/60 border border-emerald-500/30 text-emerald-300"
                         : "text-slate-300"
                     }`}
+                    aria-current={currentPersona === role ? "true" : undefined}
                   >
-                    <span className="text-base mt-0.5">{PERSONA_LABELS[role].icon}</span>
+                    <span className="text-base mt-0.5" aria-hidden>{PERSONA_LABELS[role].icon}</span>
                     <div>
                       <div className="font-semibold text-white flex items-center gap-1.5">
                         {PERSONA_LABELS[role].label}
@@ -236,13 +277,15 @@ export function Header({
           <button
             onClick={onToggleLowBandwidth}
             title={lowBandwidth ? "Low Bandwidth Mode Active (82% data saved)" : "Switch to Low Bandwidth Mode"}
-            className={`h-8 px-2 rounded-lg flex items-center gap-1 text-xs transition border ${
+            aria-pressed={lowBandwidth}
+            aria-label={lowBandwidth ? "Disable low bandwidth mode" : "Enable low bandwidth mode"}
+            className={`min-h-11 px-2 rounded-lg flex items-center gap-1 text-xs transition border touch-target ${
               lowBandwidth
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                 : "bg-black/30 hover:bg-black/50 text-slate-400 border-white/5 hover:border-emerald-800/40"
             }`}
           >
-            {lowBandwidth ? <WifiOff className="w-3.5 h-3.5 text-amber-400" /> : <Wifi className="w-3.5 h-3.5 text-emerald-400" />}
+            {lowBandwidth ? <WifiOff className="w-3.5 h-3.5 text-amber-400" aria-hidden /> : <Wifi className="w-3.5 h-3.5 text-emerald-400" aria-hidden />}
             <span className="text-[11px] font-mono hidden xl:inline">
               {lowBandwidth ? "Lite: -82%" : "Data Saver"}
             </span>
@@ -252,26 +295,35 @@ export function Header({
           <button
             onClick={onOpenCustomizer}
             title="Customize Dashboard Modular Sections"
-            className="h-8 w-8 rounded-lg bg-black/30 hover:bg-emerald-950/60 border border-white/5 hover:border-emerald-500/30 flex items-center justify-center text-slate-300 hover:text-emerald-300 transition"
+            aria-label="Customize dashboard"
+            className="min-h-11 min-w-11 w-11 h-11 rounded-lg bg-black/30 hover:bg-emerald-950/60 border border-white/5 hover:border-emerald-500/30 flex items-center justify-center text-slate-300 hover:text-emerald-300 transition touch-target"
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden />
           </button>
 
           {/* User Profile Avatar & Trust Badge */}
           <div
             onClick={() => onNavigate("profile")}
             className="flex items-center gap-2 pl-1 cursor-pointer group"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && onNavigate("profile")}
+            aria-label="Open profile"
           >
             <div className="relative">
-              <img
+              <Image
                 src={
                   user?.avatar ||
                   "https://images.pexels.com/photos/14950779/pexels-photo-14950779.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
                 }
-                alt="Brian Mwangi"
+                alt={user?.name || "Brian Mwangi"}
+                width={32}
+                height={32}
+                unoptimized
+                loading="lazy"
                 className="w-8 h-8 rounded-xl object-cover ring-2 ring-emerald-500/40 group-hover:ring-emerald-400 transition"
               />
-              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-[#060b0b] rounded-full flex items-center justify-center">
+              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-[#060b0b] rounded-full flex items-center justify-center" aria-hidden>
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
               </span>
             </div>
@@ -280,7 +332,7 @@ export function Header({
                 {user?.name || "Brian Mwangi"}
               </span>
               <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-0.5 mt-0.5">
-                <ShieldCheck className="w-2.5 h-2.5 text-amber-400 inline" />
+                <ShieldCheck className="w-2.5 h-2.5 text-amber-400 inline" aria-hidden />
                 {user?.trustScore || 98} Trust
               </span>
             </div>

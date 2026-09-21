@@ -1,4 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
+
+import Image from "next/image";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Search, X, Sparkles, MapPin, Users, ShoppingBag, Briefcase, Building2, User, ArrowRight } from "lucide-react";
@@ -202,7 +205,7 @@ export function UniversalSearchModal({
                     className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] hover:bg-emerald-950/40 border border-white/5 hover:border-emerald-500/30 cursor-pointer transition"
                   >
                     <div className="flex items-center gap-3">
-                      <img src={c.avatar} alt={c.name} className="w-9 h-9 rounded-lg object-cover" />
+                      <Image src={c.avatar} alt={c.name} className="w-9 h-9 rounded-lg object-cover" width={36} height={36} unoptimized loading="lazy" />
                       <div>
                         <div className="text-sm font-medium text-white flex items-center gap-2">
                           {c.name}
@@ -239,7 +242,7 @@ export function UniversalSearchModal({
                     }}
                     className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] hover:bg-amber-950/30 border border-white/5 hover:border-amber-500/30 cursor-pointer transition"
                   >
-                    <img src={p.image} alt={p.title} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                    <Image src={p.image} alt={p.title} className="w-12 h-12 rounded-lg object-cover shrink-0" width={48} height={48} unoptimized loading="lazy" />
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-semibold text-white truncate">{p.title}</div>
                       <div className="text-xs font-mono font-bold text-amber-300">
@@ -306,7 +309,7 @@ export function UniversalSearchModal({
                     className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] hover:bg-emerald-950/30 border border-white/5 hover:border-emerald-500/30 cursor-pointer transition"
                   >
                     <div className="flex items-center gap-3">
-                      <img src={b.avatar} alt={b.name} className="w-9 h-9 rounded-lg object-cover" />
+                      <Image src={b.avatar} alt={b.name} className="w-9 h-9 rounded-lg object-cover" width={36} height={36} unoptimized loading="lazy" />
                       <div>
                         <div className="text-xs font-semibold text-white">{b.name}</div>
                         <div className="text-[11px] text-slate-400">{b.category} • {b.neighborhood}</div>

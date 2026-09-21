@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   LayoutDashboard,
   Compass,
@@ -98,12 +98,27 @@ export function Sidebar({
     },
   ];
 
+  // Escape handling for mobile drawer + focus
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape" && onCloseMobile) onCloseMobile();
+    }
+    document.addEventListener("keydown", handleEsc);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleEsc);
+      document.body.style.overflow = prev;
+    };
+  }, [isMobileOpen, onCloseMobile]);
+
   const content = (
     <div className="flex flex-col h-full justify-between py-4 px-3 select-none">
       <div className="space-y-6">
         {/* Navigation list */}
-        <div className="space-y-1">
-          <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <nav aria-label="Primary" className="space-y-1">
+          <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500" aria-hidden>
             Platform Hubs
           </div>
           {navItems.map((item) => {
@@ -116,7 +131,9 @@ export function Sidebar({
                   onNavigate(item.id);
                   if (onCloseMobile) onCloseMobile();
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
+                aria-current={isActive ? "page" : undefined}
+                aria-label={`Navigate to ${item.label}${item.badge ? `, ${item.badge}` : ""}`}
+                className={`w-full min-h-11 flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all group touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                   isActive
                     ? "bg-gradient-to-r from-emerald-950/90 to-emerald-900/40 text-emerald-300 border border-emerald-500/30 shadow-sm"
                     : item.highlight
@@ -133,18 +150,19 @@ export function Sidebar({
                         ? "text-amber-400"
                         : "text-slate-400 group-hover:text-slate-200"
                     }`}
+                    aria-hidden
                   />
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${item.badgeColor || ""}`}>
+                  <span aria-hidden className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${item.badgeColor || ""}`}>
                     {item.badge}
                   </span>
                 )}
               </button>
             );
           })}
-        </div>
+        </nav>
 
         {/* Live Audio Room Quick Widget */}
         <div
@@ -152,11 +170,20 @@ export function Sidebar({
             onNavigate("communities");
             if (onCloseMobile) onCloseMobile();
           }}
-          className="p-3 rounded-2xl bg-gradient-to-br from-[#0c1a17] to-[#081210] border border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer transition group"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onNavigate("communities");
+              if (onCloseMobile) onCloseMobile();
+            }
+          }}
+          aria-label="Join live audio lounge, 14 listening"
+          className="p-3 rounded-2xl bg-gradient-to-br from-[#0c1a17] to-[#081210] border border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer transition group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         >
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" aria-hidden />
               Live Audio Lounge
             </span>
             <span className="text-[10px] text-slate-400 font-mono">14 listening</span>
@@ -165,7 +192,7 @@ export function Sidebar({
             Silicon Savannah: AI Agents & M-Pesa Micro-rails
           </div>
           <div className="mt-2.5 flex items-center justify-between">
-            <div className="flex -space-x-2">
+            <div className="flex -space-x-2" aria-hidden>
               <div className="w-6 h-6 rounded-full bg-emerald-800 border-2 border-[#0c1a17] text-[10px] flex items-center justify-center font-bold text-emerald-200">
                 BM
               </div>
@@ -186,14 +213,14 @@ export function Sidebar({
       {/* Bottom Sovereignty Badge */}
       <div className="pt-4 border-t border-emerald-950/50 space-y-2">
         <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-950/80 flex items-center gap-2.5">
-          <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+          <Shield className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden />
           <div className="text-[11px]">
             <div className="font-semibold text-slate-200">Kinara Escrow & Trust</div>
             <div className="text-slate-400 text-[10px]">Zero fraud guarantee • 256-bit</div>
           </div>
         </div>
 
-        <div className="text-[10px] text-slate-400 text-center font-mono pt-1">
+        <div className="text-[10px] text-slate-400 text-center font-mono pt-1" aria-hidden>
           KINARA SOVEREIGN OS • NAIROBI
         </div>
       </div>
@@ -203,19 +230,28 @@ export function Sidebar({
   return (
     <>
       {/* Desktop static sidebar */}
-      <aside className="hidden md:block w-64 shrink-0 glass-panel border-r border-emerald-950/60 h-[calc(100vh-4rem)] sticky top-16 overflow-y-auto">
+      <aside id="desktop-sidebar" aria-label="Sidebar navigation" className="hidden md:block w-64 shrink-0 glass-panel border-r border-emerald-950/60 h-[calc(100vh-4rem)] sticky top-16 overflow-y-auto">
         {content}
       </aside>
 
       {/* Mobile Drawer Overlay */}
       {isMobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="fixed inset-y-0 left-0 w-72 bg-[#091111] border-r border-emerald-500/30 shadow-2xl overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 md:hidden bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && onCloseMobile) onCloseMobile();
+          }}
+        >
+          <div id="mobile-sidebar" className="fixed inset-y-0 left-0 w-72 bg-[#091111] border-r border-emerald-500/30 shadow-2xl overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-emerald-950">
               <span className="text-sm font-bold text-emerald-300">KINARA NAVIGATION</span>
               <button
                 onClick={onCloseMobile}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                className="min-h-11 min-w-11 p-2 rounded-lg text-slate-400 hover:text-white touch-target flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                aria-label="Close navigation"
               >
                 ✕
               </button>

@@ -12,6 +12,28 @@
     --kinara-gold: #f59e0b;
     --kinara-gold-warm: #d97706;
     --kinara-gold-light: #fde68a;
+    --kinara-indigo: #1e1b4b;
+    --kinara-indigo-light: #4338ca;
+    --kinara-slate: #475569;
+    --kinara-slate-light: #94a3b8;
+    --kinara-slate-dark: #1e293b;
+    /* Spacing scale */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    /* Typography scale */
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 20px;
+    --text-2xl: 24px;
+    --text-3xl: 30px;
+    --text-4xl: 36px;
   }
 
   body {
@@ -129,4 +151,125 @@
 }
 .low-bandwidth-mode * {
   backdrop-filter: none !important;
+}
+
+/* Focus visible - keyboard a11y */
+*:focus-visible {
+  outline: 2px solid var(--kinara-emerald-bright);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .kinara-card:hover {
+    transform: none !important;
+  }
+}
+
+/* High contrast */
+@media (prefers-contrast: more) {
+  .kinara-card {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+  .glass-panel {
+    background: rgba(0, 0, 0, 0.95) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+  }
+}
+
+/* Slow spin for radar */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spinSlow 8s linear infinite;
+}
+
+/* Fade-in for dialogs */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideIn {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-in {
+  animation: fadeIn 150ms ease-out;
+}
+.animate-slide-in {
+  animation: slideIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Utility: touch target min 44px */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Badge variants missing */
+.badge-indigo {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.5), rgba(67, 56, 202, 0.15));
+  border: 1px solid rgba(67, 56, 202, 0.4);
+  color: #a5b4fc;
+}
+.badge-slate {
+  background: linear-gradient(135deg, rgba(71, 85, 105, 0.3), rgba(30, 41, 59, 0.2));
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  color: #cbd5e1;
+}
+
+/* Leaflet map — sovereign emerald/gold fixes */
+.leaflet-container {
+  z-index: 0 !important;
+  font-family: inherit;
+  background: #060c0c !important;
+}
+.leaflet-pane { z-index: 1 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 400 !important; }
+.leaflet-control-zoom a {
+  background: rgba(9, 18, 18, 0.92) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16,185,129,0.25) !important;
+  backdrop-filter: blur(8px);
+}
+.leaflet-control-zoom a:hover {
+  background: rgba(16,185,129,0.15) !important;
+}
+.leaflet-control-attribution {
+  background: rgba(0,0,0,0.65) !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  font-family: ui-monospace, monospace !important;
+  border-radius: 6px 0 0 0;
+  padding: 2px 6px !important;
+}
+.leaflet-control-attribution a { color: #34d399 !important; }
+.leaflet-popup-content-wrapper {
+  background: rgba(255,255,255,0.98) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(16,185,129,0.12) !important;
+  border: 1px solid rgba(16,185,129,0.15) !important;
+}
+.leaflet-popup-tip { background: rgba(255,255,255,0.98) !important; }
+.leaflet-popup-close-button { color: #64748b !important; top: 6px !important; right: 8px !important; }
+.kinara-radar-pin, .kinara-user-pin { background: transparent !important; border: none !important; }
+@keyframes kinaraVoicePulse {
+  0% { transform: scale(0.85); opacity: 0.9; }
+  70% { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
 }

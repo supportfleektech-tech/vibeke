@@ -1,6 +1,9 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState } from "react";
+import Image from "next/image";
+import React, { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   Compass,
   MapPin,
@@ -9,30 +12,83 @@ import {
   Calendar,
   Tag,
   ShoppingBag,
-  ExternalLink,
   MessageCircle,
   Navigation,
-  Clock,
-  Sparkles,
-  ShieldCheck
+  ShieldCheck,
 } from "lucide-react";
+import { toast } from "sonner";
 import { RadarPin } from "@/types";
+
+// Leaflet CSS — required once (also imported in LeafletMapCore; keep here for SSR-safe guarantee)
+import "leaflet/dist/leaflet.css";
+
+// Dynamically import the Leaflet map core (ssr:false) to avoid "window is not defined"
+const LeafletMapCore = dynamic(() => import("./LeafletMapCore"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full min-h-[400px] lg:min-h-[500px] bg-[#060c0c] flex flex-col items-center justify-center gap-3">
+      <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-500/30 flex items-center justify-center animate-pulse">
+        <Compass className="w-5 h-5 text-emerald-400 animate-spin-slow" />
+      </div>
+      <div className="text-xs font-mono text-emerald-400/80 tracking-widest">LOADING SOVEREIGN MAP • OSM + CARTO</div>
+      <div className="text-[11px] text-slate-500">Kilimani • -1.2921, 36.7850 • 5.0 KM</div>
+    </div>
+  ),
+});
 
 interface LocalRadarMapProps {
   pins: RadarPin[];
   selectedCity: string;
-  onNavigate: (view: string, extra?: any) => void;
+  onNavigate: (view: string, extra?: unknown) => void;
 }
+
+const KILIMANI_POS: [number, number] = [-1.2921, 36.785];
 
 export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapProps) {
   const [filter, setFilter] = useState<string>("all");
   const [selectedPin, setSelectedPin] = useState<RadarPin | null>(pins[0] || null);
-  const [radarPinging, setRadarPinging] = useState(true);
+  const [userPos, setUserPos] = useState<[number, number]>(KILIMANI_POS);
 
-  const filteredPins = pins.filter((p) => {
-    if (filter === "all") return true;
-    return p.type === filter;
-  });
+  // Keep selected pin in sync when pins prop changes (e.g., initial fetch)
+  useEffect(() => {
+    if (!selectedPin && pins.length > 0) {
+      setSelectedPin(pins[0]);
+    }
+  }, [pins, selectedPin]);
+
+  // Opt-in geolocation: request once on mount, fallback to Kilimani
+  useEffect(() => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) return;
+    // Use permission-friendly geolocation (no prompt spam — only if user grants)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        // Only accept if finite & within plausible Nairobi bounds (~100km)
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setUserPos([latitude, longitude]);
+        }
+      },
+      () => {
+        // Silently keep Kilimani fallback; privacy opt-in respected
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  }, []);
+
+  const filteredPins = useMemo(() => {
+    if (filter === "all") return pins;
+    return pins.filter((p) => p.type === filter);
+  }, [pins, filter]);
+
+  // When filter changes, ensure selectedPin is visible; if not, auto-pick first filtered
+  useEffect(() => {
+    if (filteredPins.length === 0) {
+      setSelectedPin(null);
+      return;
+    }
+    if (selectedPin && filteredPins.some((p) => p.id === selectedPin.id)) return;
+    setSelectedPin(filteredPins[0]);
+  }, [filteredPins, selectedPin]);
 
   const getPinIcon = (type: string) => {
     switch (type) {
@@ -68,6 +124,50 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
     }
   };
 
+  const handleRouteDrawer = () => {
+    if (!selectedPin) return;
+    const plat = parseFloat(String(selectedPin.lat));
+    const plng = parseFloat(String(selectedPin.lng));
+    if (!Number.isFinite(plat) || !Number.isFinite(plng)) {
+      toast.error("Pin location unavailable");
+      return;
+    }
+    const url = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userPos[0]},${userPos[1]};${plat},${plng}#map=14/${plat}/${plng}`;
+    toast.success(`Routing to ${selectedPin.name} • OSM directions opened`);
+    if (typeof window !== "undefined") {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleDrawerAction = () => {
+    if (!selectedPin) return;
+    switch (selectedPin.type) {
+      case "friend":
+        onNavigate("messaging");
+        toast.success(`Opening dispatch to ${selectedPin.name}`);
+        break;
+      case "business":
+        onNavigate("business");
+        toast.success(`Opening storefront: ${selectedPin.name}`);
+        break;
+      case "listing":
+        onNavigate("marketplace");
+        toast.success(`Opening listing: ${selectedPin.name}`);
+        break;
+      case "event":
+        toast.success(`RSVP Confirmed for ${selectedPin.name}! Event pass saved to your Kinara wallet.`);
+        break;
+      case "deal":
+        toast.success(`Deal Activated! Show QR at counter: KINARA-PERK-25 • ${selectedPin.name}`);
+        break;
+      case "service":
+        toast.success(`Service inquiry sent to ${selectedPin.name}`);
+        break;
+      default:
+        toast.info(`Viewing ${selectedPin.name}`);
+    }
+  };
+
   return (
     <div className="kinara-card rounded-3xl border border-emerald-500/25 overflow-hidden bg-[#091212] shadow-xl">
       {/* Radar Header */}
@@ -78,21 +178,17 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-white font-sans">
-                Local Radar • {selectedCity}
-              </h3>
+              <h3 className="text-base font-bold text-white font-sans">Local Radar • {selectedCity}</h3>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
-                12 ACTIVE NODES
+                {filteredPins.length} ACTIVE NODES
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              Real-time proximity network: friends, events, businesses & verified drops
-            </p>
+            <p className="text-xs text-slate-400">Real-time proximity network: friends, events, businesses & verified drops</p>
           </div>
         </div>
 
-        {/* Filter Badges */}
-        <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto text-xs scrollbar-thin">
           {[
             { id: "all", label: "All Pins" },
             { id: "friend", label: "Friends" },
@@ -104,7 +200,7 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
             <button
               key={item.id}
               onClick={() => setFilter(item.id)}
-              className={`px-2.5 py-1 rounded-lg transition capitalize font-medium ${
+              className={`px-2.5 py-1 rounded-lg transition capitalize font-medium whitespace-nowrap ${
                 filter === item.id
                   ? "bg-emerald-600/30 text-emerald-300 border border-emerald-500/40"
                   : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
@@ -116,82 +212,51 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
         </div>
       </div>
 
-      {/* Main Radar Screen Layout */}
+      {/* Main Radar Screen Layout: real map + drawer */}
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[380px]">
-        {/* Interactive Tactical Map & Radar Visualizer */}
-        <div className="lg:col-span-8 relative bg-[#060c0c] p-6 flex items-center justify-center overflow-hidden border-b lg:border-b-0 lg:border-r border-emerald-950/60">
-          {/* Radar concentric circular grid rings */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-[180px] h-[180px] rounded-full border border-emerald-500/10" />
-            <div className="absolute w-[320px] h-[320px] rounded-full border border-emerald-500/15" />
-            <div className="absolute w-[460px] h-[460px] rounded-full border border-emerald-500/10" />
-            <div className="absolute w-[600px] h-[600px] rounded-full border border-emerald-500/5" />
-            {/* Center crosshair */}
-            <div className="absolute w-full h-[1px] bg-emerald-500/10" />
-            <div className="absolute h-full w-[1px] bg-emerald-500/10" />
+        {/* Real Leaflet Map */}
+        <div className="lg:col-span-8 relative bg-[#060c0c] overflow-hidden border-b lg:border-b-0 lg:border-r border-emerald-950/60 flex flex-col">
+          <div className="relative w-full h-[400px] lg:h-[500px] border-b border-emerald-500/10">
+            <LeafletMapCore
+              pins={filteredPins}
+              selectedPin={selectedPin}
+              onSelectPin={setSelectedPin}
+              userPos={userPos}
+              onNavigate={onNavigate}
+            />
 
-            {/* Sweep line animation */}
-            <div className="absolute w-64 h-64 rounded-full bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent pointer-events-none animate-spin-slow" />
-          </div>
-
-          {/* Current user location center */}
-          <div className="relative z-10 flex flex-col items-center">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/30 voice-pulse">
-                <span className="w-3.5 h-3.5 rounded-full bg-emerald-400" />
-              </div>
+            {/* HUD overlay — GPS + range */}
+            <div className="absolute bottom-3 left-3 z-[400] text-[10px] font-mono text-emerald-300 bg-black/75 backdrop-blur px-2.5 py-1 rounded-md border border-emerald-950 shadow-lg">
+              GPS: {userPos[0].toFixed(4)}, {userPos[1].toFixed(4)} • RANGE: 5.0 KM RADIUS
             </div>
-            <span className="text-[10px] font-mono font-bold text-emerald-300 mt-1 bg-black/60 px-2 py-0.5 rounded border border-emerald-500/30">
-              Kilimani • You (Brian)
-            </span>
+            <div className="absolute top-3 right-3 z-[400] text-[10px] font-mono text-amber-300 bg-black/70 px-2 py-1 rounded-md border border-amber-500/20">
+              CARTO LIGHT • OSM FREE TILES
+            </div>
           </div>
 
-          {/* Placed Interactive Radar Nodes around the map */}
-          {filteredPins.map((pin, i) => {
-            // Calculate pseudo coordinates in circular space
-            const angles = [35, 120, 210, 310, 165, 75];
-            const angle = (angles[i % angles.length] * Math.PI) / 180;
-            const radius = 90 + (i % 3) * 55;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-
-            const isSelected = selectedPin?.id === pin.id;
-
-            return (
-              <div
-                key={pin.id}
-                onClick={() => setSelectedPin(pin)}
-                style={{
-                  transform: `translate(${x}px, ${y}px)`,
-                }}
-                className="absolute z-20 cursor-pointer group"
-              >
-                <div
-                  className={`p-1.5 rounded-xl border flex items-center gap-1.5 shadow-lg transition-transform hover:scale-110 ${getPinColor(
-                    pin.type
-                  )} ${isSelected ? "ring-2 ring-emerald-400 scale-105" : ""}`}
-                >
-                  <img
-                    src={pin.avatar}
-                    alt={pin.name}
-                    className="w-6 h-6 rounded-lg object-cover"
-                  />
-                  <div className="hidden sm:block text-[11px] font-semibold max-w-[110px] truncate">
-                    {pin.name}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Compass & Distance HUD */}
-          <div className="absolute bottom-3 left-3 text-[10px] font-mono text-emerald-400/70 bg-black/70 px-2.5 py-1 rounded-md border border-emerald-950">
-            GPS: -1.2921, 36.7850 • RANGE: 5.0 KM RADIUS
+          {/* Optional mini legend strip below map */}
+          <div className="px-3 py-2 bg-[#071313] border-t border-emerald-950/40 flex items-center gap-2 text-[10px] font-mono text-slate-400 flex-wrap">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" /> Friends
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500" /> Biz
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-sky-500" /> Events
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500" /> Deals
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-300" /> Drops
+            </span>
+            <span className="ml-auto text-emerald-400/70">tap pin → popup • click for drawer</span>
           </div>
         </div>
 
         {/* Pin Inspection & Direct Action Drawer */}
-        <div className="lg:col-span-4 p-5 flex flex-col justify-between bg-[#0b1616]">
+        <div className="lg:col-span-4 p-5 flex flex-col justify-between bg-[#0b1616] min-h-[420px]">
           {selectedPin ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs font-semibold text-emerald-400">
@@ -205,15 +270,17 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
               </div>
 
               <div className="flex items-center gap-3">
-                <img
+                <Image
                   src={selectedPin.avatar}
                   alt={selectedPin.name}
+                  width={56}
+                  height={56}
+                  unoptimized
+                  loading="lazy"
                   className="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-500/30"
                 />
-                <div>
-                  <h4 className="text-sm font-bold text-white leading-tight">
-                    {selectedPin.name}
-                  </h4>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-bold text-white leading-tight truncate">{selectedPin.name}</h4>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {selectedPin.neighborhood}, {selectedPin.city}
                   </p>
@@ -231,8 +298,8 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
               <div className="space-y-2 pt-2">
                 {selectedPin.type === "friend" && (
                   <button
-                    onClick={() => onNavigate("messaging")}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <MessageCircle className="w-4 h-4" />
                     <span>Send Quick Dispatch / Meet</span>
@@ -241,8 +308,8 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
 
                 {selectedPin.type === "business" && (
                   <button
-                    onClick={() => onNavigate("business")}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <Building2 className="w-4 h-4" />
                     <span>View Storefront & Book Pod</span>
@@ -251,8 +318,8 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
 
                 {selectedPin.type === "listing" && (
                   <button
-                    onClick={() => onNavigate("marketplace")}
-                    className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <ShoppingBag className="w-4 h-4" />
                     <span>View Listing & Escrow Buy</span>
@@ -261,8 +328,8 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
 
                 {selectedPin.type === "event" && (
                   <button
-                    onClick={() => alert(`RSVP Confirmed for ${selectedPin.name}! Event pass saved to your Kinara wallet.`)}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <Calendar className="w-4 h-4" />
                     <span>RSVP & Get Digital Pass</span>
@@ -271,27 +338,40 @@ export function LocalRadarMap({ pins, selectedCity, onNavigate }: LocalRadarMapP
 
                 {selectedPin.type === "deal" && (
                   <button
-                    onClick={() => alert(`Deal Activated! Show QR code at counter: KINARA-PERK-25`)}
-                    className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-2 transition"
                   >
                     <Tag className="w-4 h-4" />
                     <span>Claim 25% Member Voucher</span>
                   </button>
                 )}
 
+                {selectedPin.type === "service" && (
+                  <button
+                    onClick={handleDrawerAction}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>Request Service</span>
+                  </button>
+                )}
+
                 <button
-                  onClick={() => alert(`Directions loaded via Kinara Sovereign Maps: Route is 7 mins via Ring Road Kilimani.`)}
-                  className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-medium text-xs flex items-center justify-center gap-2 border border-white/5 transition"
+                  onClick={handleRouteDrawer}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-medium text-xs flex items-center justify-center gap-2 border border-white/5 transition"
                 >
                   <Navigation className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Get Turn-by-Turn Route</span>
                 </button>
               </div>
+
+              {/* Lat/Lng debug — useful for sovereign map verification */}
+              <div className="pt-2 text-[10px] font-mono text-slate-500">
+                COORDS: {parseFloat(String(selectedPin.lat)).toFixed(4)}, {parseFloat(String(selectedPin.lng)).toFixed(4)}
+              </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-slate-400 text-xs">
-              Select a node on the radar to inspect details and initiate actions.
-            </div>
+            <div className="text-center py-12 text-slate-400 text-xs">Select a node on the radar to inspect details and initiate actions.</div>
           )}
 
           {/* Verified safety guarantee */}

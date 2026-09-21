@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, Calendar, Clock, Check, ShieldCheck, Loader2 } from "lucide-react";
 import { BusinessStorefront } from "@/types";
+import { toast } from "sonner";
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -46,8 +47,8 @@ export function BookingModal({
       setTimeout(() => {
         onSuccess(ref);
       }, 1500);
-    } catch {
-      alert("Error booking appointment.");
+    } catch (e: any) {
+      toast.error(e?.message || "Error booking appointment.");
     } finally {
       setIsSubmitting(false);
     }

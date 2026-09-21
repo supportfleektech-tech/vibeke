@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   Sparkles,
@@ -34,6 +36,8 @@ import {
 } from "@/types";
 import { PostComposer } from "@/components/feed/PostComposer";
 import { PostCard } from "@/components/feed/PostCard";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 interface DynamicHomeProps {
   user: UserProfile | null;
@@ -69,7 +73,7 @@ export function DynamicHome({
   // Cinema video preview player simulation
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
 
-  const cinemaShowcases = [
+  const cinemaShowcases: Array<{ id: number; title: string; creator: string; duration: string; views: string; thumb: string; video?: string | null }> = [
     {
       id: 1,
       title: "Silicon Savannah: The Offline Edge Revolution",
@@ -77,6 +81,7 @@ export function DynamicHome({
       duration: "4:18",
       views: "18.4k",
       thumb: "https://images.pexels.com/photos/29069344/pexels-photo-29069344.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      video: null,
     },
     {
       id: 2,
@@ -85,6 +90,7 @@ export function DynamicHome({
       duration: "6:42",
       views: "24.9k",
       thumb: "https://images.pexels.com/photos/5332445/pexels-photo-5332445.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+      video: null,
     },
     {
       id: 3,
@@ -93,8 +99,30 @@ export function DynamicHome({
       duration: "3:30",
       views: "12.1k",
       thumb: "https://images.pexels.com/photos/27556617/pexels-photo-27556617.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      video: null,
     },
   ];
+
+  const visibleSections = sectionsConfig.filter((s) => s.visible);
+
+  // Empty-state when all visible false
+  if (visibleSections.length === 0) {
+    return (
+      <div className="space-y-8 pb-12">
+        <div className="kinara-card rounded-3xl p-10 text-center border border-dashed border-emerald-500/20 bg-[#0d1d1b]/50 space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-950/60 border border-emerald-500/20 flex items-center justify-center mx-auto">
+            <SlidersHorizontal className="w-6 h-6 text-emerald-400" />
+          </div>
+          <h3 className="text-sm font-bold text-white">No sections visible</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">You&apos;ve hidden all dashboard modules. Restore your sovereign layout to continue discovering Nairobi&apos;s high-trust network.</p>
+          <Button variant="primary" size="sm" onClick={onOpenCustomizer} className="mx-auto">
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Customize Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Render individual sections based on config order
   function renderSection(sectionId: string) {
@@ -109,7 +137,7 @@ export function DynamicHome({
             <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">👋</span>
+                  <span className="text-xl" aria-hidden>👋</span>
                   <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                     Good Evening, {user?.name?.split(" ")[0] || "Brian"}
                   </h1>
@@ -134,6 +162,7 @@ export function DynamicHome({
                 <button
                   onClick={onOpenCustomizer}
                   className="px-3 py-2 rounded-xl bg-black/40 hover:bg-emerald-950/60 border border-white/5 hover:border-emerald-500/30 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition"
+                  aria-label="Customize dashboard"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Customize Dashboard</span>
@@ -142,7 +171,7 @@ export function DynamicHome({
             </div>
 
             {/* Subtle background glow */}
-            <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-l from-emerald-500/10 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-l from-emerald-500/10 via-transparent to-transparent pointer-events-none" aria-hidden />
           </div>
         );
 
@@ -152,7 +181,7 @@ export function DynamicHome({
           <div key="trending" className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Flame className="w-4 h-4 text-amber-400" />
+                <Flame className="w-4 h-4 text-amber-400" aria-hidden />
                 <span>🔥 Trending Pulses & Dispatches</span>
               </div>
               <span className="text-xs text-slate-400 font-mono">{posts.length} Live Dispatches</span>
@@ -174,6 +203,11 @@ export function DynamicHome({
                   onNavigateProfile={() => onNavigate("profile")}
                 />
               ))}
+              {posts.length === 0 && (
+                <div className="kinara-card p-6 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-400">
+                  No dispatches yet. Be the first to pulse from {selectedCity}.
+                </div>
+              )}
             </div>
           </div>
         );
@@ -184,12 +218,13 @@ export function DynamicHome({
           <div key="radar" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Compass className="w-4 h-4 text-emerald-400 animate-spin-slow" />
+                <Compass className="w-4 h-4 text-emerald-400 animate-spin-slow" aria-hidden />
                 <span>📍 Nearby Local Radar • {selectedCity}</span>
               </div>
               <button
                 onClick={() => onNavigate("radar")}
                 className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                aria-label="View full map radar"
               >
                 <span>Full Map Radar</span>
                 <ArrowRight className="w-3 h-3" />
@@ -203,12 +238,14 @@ export function DynamicHome({
                   key={pin.id}
                   onClick={() => onNavigate("radar")}
                   className="kinara-card p-3.5 rounded-2xl border border-white/5 hover:border-emerald-500/30 cursor-pointer transition flex items-center gap-3"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("radar")}
                 >
-                  <img
-                    src={pin.avatar}
+                  <Image src={pin.avatar}
                     alt={pin.name}
-                    className="w-12 h-12 rounded-xl object-cover shrink-0 ring-2 ring-emerald-500/20"
-                  />
+                    loading="lazy"
+                    className="w-12 h-12 rounded-xl object-cover shrink-0 ring-2 ring-emerald-500/20" width={48} height={48} unoptimized />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white truncate">{pin.name}</span>
@@ -221,6 +258,11 @@ export function DynamicHome({
                   </div>
                 </div>
               ))}
+              {radar.length === 0 && (
+                <div className="col-span-3 kinara-card p-4 rounded-2xl border border-dashed border-white/10 text-xs text-slate-400 text-center">
+                  No radar pins nearby. Expand your proximity in {selectedCity}.
+                </div>
+              )}
             </div>
           </div>
         );
@@ -231,7 +273,7 @@ export function DynamicHome({
           <div key="communities" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Users className="w-4 h-4 text-emerald-400" />
+                <Users className="w-4 h-4 text-emerald-400" aria-hidden />
                 <span>👥 Communities & Live Audio Lounges</span>
               </div>
               <button
@@ -249,13 +291,15 @@ export function DynamicHome({
                   key={comm.id}
                   onClick={() => onNavigate("communities", { communitySlug: comm.slug })}
                   className="kinara-card p-4 rounded-2xl border border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer transition space-y-3 bg-gradient-to-br from-[#0c1817] to-[#081211]"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("communities", { communitySlug: comm.slug })}
                 >
                   <div className="flex items-start gap-3">
-                    <img
-                      src={comm.avatar}
+                    <Image src={comm.avatar}
                       alt={comm.name}
-                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/20"
-                    />
+                      loading="lazy"
+                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/20" width={48} height={48} unoptimized />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="text-xs font-bold text-white truncate">{comm.name}</h4>
@@ -275,7 +319,7 @@ export function DynamicHome({
                   {comm.activeVoice && (
                     <div className="p-2.5 rounded-xl bg-black/50 border border-emerald-950 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                        <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" aria-hidden />
                         <span className="text-emerald-300 text-[11px] truncate max-w-[200px]">
                           {comm.voiceRoomTopic || "Audio Lounge Live"}
                         </span>
@@ -285,6 +329,9 @@ export function DynamicHome({
                   )}
                 </div>
               ))}
+              {communities.length === 0 && (
+                <div className="col-span-2 kinara-card p-4 rounded-2xl border border-dashed border-white/10 text-xs text-slate-400 text-center">No communities yet.</div>
+              )}
             </div>
           </div>
         );
@@ -295,7 +342,7 @@ export function DynamicHome({
           <div key="jobs" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Briefcase className="w-4 h-4 text-emerald-400" />
+                <Briefcase className="w-4 h-4 text-emerald-400" aria-hidden />
                 <span>💼 High-Craft Opportunities</span>
               </div>
               <button
@@ -313,6 +360,9 @@ export function DynamicHome({
                   key={j.id}
                   onClick={() => onNavigate("jobs")}
                   className="kinara-card p-4 rounded-2xl border border-white/5 hover:border-emerald-500/30 cursor-pointer transition flex items-center justify-between"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("jobs")}
                 >
                   <div className="space-y-1 min-w-0 pr-2">
                     <h4 className="text-xs font-bold text-white truncate">{j.title}</h4>
@@ -322,6 +372,9 @@ export function DynamicHome({
                   <span className="text-xs text-emerald-400 shrink-0 font-bold">Apply →</span>
                 </div>
               ))}
+              {jobs.length === 0 && (
+                <div className="col-span-2 kinara-card p-4 rounded-2xl border border-dashed border-white/10 text-xs text-slate-400 text-center">No opportunities at the moment.</div>
+              )}
             </div>
           </div>
         );
@@ -332,7 +385,7 @@ export function DynamicHome({
           <div key="marketplace" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <ShoppingBag className="w-4 h-4 text-amber-400" />
+                <ShoppingBag className="w-4 h-4 text-amber-400" aria-hidden />
                 <span>🛒 Curated Escrow Drops</span>
               </div>
               <button
@@ -350,14 +403,15 @@ export function DynamicHome({
                   key={prod.id}
                   onClick={() => onNavigate("marketplace")}
                   className="kinara-card rounded-2xl overflow-hidden border border-white/5 hover:border-amber-500/40 cursor-pointer transition flex flex-col justify-between group"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && onNavigate("marketplace")}
                 >
                   <div className="relative aspect-[4/3] w-full overflow-hidden">
-                    <img
-                      src={prod.image}
+                    <Image src={prod.image}
                       alt={prod.title}
                       className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
+                      loading="lazy" width={600} height={400} unoptimized sizes="100vw" />
                     <div className="absolute top-2 left-2 bg-black/75 px-2 py-0.5 rounded-full text-[10px] text-emerald-300 border border-emerald-500/30 font-mono">
                       Escrow
                     </div>
@@ -376,6 +430,9 @@ export function DynamicHome({
                   </div>
                 </div>
               ))}
+              {products.length === 0 && (
+                <div className="col-span-3 kinara-card p-4 rounded-2xl border border-dashed border-white/10 text-xs text-slate-400 text-center">No curated drops in {selectedCity} yet.</div>
+              )}
             </div>
           </div>
         );
@@ -386,7 +443,7 @@ export function DynamicHome({
           <div key="cinema" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Film className="w-4 h-4 text-emerald-400" />
+                <Film className="w-4 h-4 text-emerald-400" aria-hidden />
                 <span>🎬 KINARA Cinema & African Creative Spotlights</span>
               </div>
               <span className="text-xs text-slate-400 font-mono">4K Master Audio</span>
@@ -396,20 +453,47 @@ export function DynamicHome({
               {cinemaShowcases.map((vid) => (
                 <div
                   key={vid.id}
-                  onClick={() => setPlayingVideoId(playingVideoId === vid.id ? null : vid.id)}
+                  onClick={() => {
+                    if (vid.video) {
+                      setPlayingVideoId(playingVideoId === vid.id ? null : vid.id);
+                    } else {
+                      toast.info("Preview coming soon – image showcase only.");
+                    }
+                  }}
                   className="kinara-card rounded-2xl overflow-hidden border border-white/5 hover:border-emerald-500/40 cursor-pointer transition group"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (vid.video) setPlayingVideoId(playingVideoId === vid.id ? null : vid.id);
+                      else toast.info("Preview coming soon – image showcase only.");
+                    }
+                  }}
+                  aria-label={`${vid.title} by ${vid.creator}`}
                 >
                   <div className="relative aspect-video w-full overflow-hidden bg-black">
-                    <img
-                      src={vid.thumb}
-                      alt={vid.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition"
-                    />
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500/80 text-black flex items-center justify-center shadow-lg group-hover:scale-110 transition">
-                        <Volume2 className="w-4 h-4" />
-                      </div>
-                    </div>
+                    {vid.video && playingVideoId === vid.id ? (
+                      <video
+                        src={vid.video}
+                        poster={vid.thumb}
+                        controls
+                        autoPlay
+                        className="w-full h-full object-cover"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        <Image src={vid.thumb}
+                          alt={vid.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition" width={600} height={400} unoptimized sizes="100vw" />
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-emerald-500/80 text-black flex items-center justify-center shadow-lg group-hover:scale-110 transition">
+                            <Volume2 className="w-4 h-4" aria-hidden />
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <span className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-white">
                       {vid.duration}
                     </span>
@@ -430,13 +514,13 @@ export function DynamicHome({
           </div>
         );
 
-      /* 8. MESSAGES QUICK PREVIEW */
+      /* 8. MESSAGES QUICK PREVIEW - now uses messages prop */
       case "messages":
         return (
           <div key="messages" className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <MessageSquare className="w-4 h-4 text-emerald-400" aria-hidden />
                 <span>💬 Active Dispatches & Negotiation Channels</span>
               </div>
               <button
@@ -449,35 +533,57 @@ export function DynamicHome({
             </div>
 
             <div className="kinara-card p-4 rounded-2xl border border-white/5 space-y-2.5">
-              <div
-                onClick={() => onNavigate("messaging")}
-                className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <img
-                      src="https://images.pexels.com/photos/1181695/pexels-photo-1181695.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800"
-                      alt="Folake"
-                      className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/20"
-                    />
-                    <span className="absolute -bottom-1 -right-1 bg-[#060b0b] rounded-full p-0.5">
-                      <ShieldCheck className="w-3 h-3 text-amber-400" />
-                    </span>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-2">
-                      <span>Folake Adebayo (Lagos)</span>
-                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1 rounded font-mono">
-                        99 ★
-                      </span>
+              {messages.length > 0 ? (
+                messages.slice(0, 3).map((msg) => (
+                  <div
+                    key={msg.id}
+                    onClick={() => onNavigate("messaging")}
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer transition"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && onNavigate("messaging")}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="relative">
+                        <Image src={msg.senderAvatar}
+                          alt={msg.senderName}
+                          loading="lazy"
+                          className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/20" width={40} height={40} unoptimized />
+                        <span className="absolute -bottom-1 -right-1 bg-[#060b0b] rounded-full p-0.5">
+                          <ShieldCheck className="w-3 h-3 text-amber-400" aria-hidden />
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-white flex items-center gap-2 truncate">
+                          <span className="truncate">{msg.senderName}</span>
+                          {msg.isMe ? (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded font-mono">You</span>
+                          ) : (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1 rounded font-mono">New</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate max-w-sm">
+                          &ldquo;{msg.text.slice(0, 80)}{msg.text.length > 80 ? "…" : ""}&rdquo;
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-400 truncate max-w-sm">
-                      &ldquo;Brian, the escrow smart contract for the trade corridor is deployed...&rdquo;
+                    <span className="text-[11px] font-mono text-emerald-400 shrink-0 ml-2">{msg.timestamp}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white/[0.02] border border-dashed border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-950/40 border border-emerald-500/20 flex items-center justify-center">
+                      <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">No dispatches yet</div>
+                      <div className="text-[11px] text-slate-400">Start a conversation from Marketplace or Business</div>
                     </div>
                   </div>
+                  <button onClick={() => onNavigate("messaging")} className="text-[11px] font-mono text-emerald-400 hover:underline">Open →</button>
                 </div>
-                <span className="text-[11px] font-mono text-emerald-400">10:18 AM</span>
-              </div>
+              )}
             </div>
           </div>
         );
@@ -490,9 +596,7 @@ export function DynamicHome({
   return (
     <div className="space-y-8 pb-12">
       {/* Adaptively rendered sections based on user's customized order & visibility */}
-      {sectionsConfig
-        .filter((s) => s.visible)
-        .map((section) => renderSection(section.id))}
+      {visibleSections.map((section) => renderSection(section.id))}
     </div>
   );
 }

@@ -1,0 +1,87 @@
+name: kinara
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kinara_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kinara_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kinara_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [kinara]
+
+  # Optional: Redis for distributed rate-limiting (enable when multiple app replicas)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: kinara_redis
+  #   restart: unless-stopped
+  #   ports: ["6379:6379"]
+  #   volumes: [redisdata:/data]
+  #   command: ["redis-server", "--appendonly", "yes"]
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     retries: 5
+  #   networks: [kinara]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kinara_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Database — internal compose DNS "db"
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/kinara_db
+      # Auth
+      NEXTAUTH_SECRET: change-me-in-production-generate-32chars-min
+      NEXTAUTH_URL: http://localhost:3000
+      NODE_ENV: production
+      # Seed (set random in production, e.g. openssl rand -hex 32)
+      SEED_SECRET: kinara-seed-local-only
+      # AI (optional real provider)
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+      # Distributed limiter (when redis enabled, point at redis or Upstash)
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-}
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      # Maps (optional tile token for Leaflet)
+      NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN:-}
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q '\"ok\":true' || node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>r.json()).then(j=>process.exit(j.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 45s
+    networks: [kinara]
+
+volumes:
+  pgdata:
+  # redisdata:
+
+networks:
+  kinara:
+    driver: bridge

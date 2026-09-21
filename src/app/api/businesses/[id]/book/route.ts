@@ -1,35 +1,75 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { businesses } from "@/db/schema";
+import { businesses, bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { bookingSchema } from "@/lib/validators";
+import { rateLimit, getClientIp } from "@/lib/ratelimit";
+import { getCurrentUserId } from "@/lib/get-user";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ip = getClientIp(request);
+    const rl = rateLimit(`businesses:book:${ip}`, 10, 60_000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit exceeded. Try again soon." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil((rl.reset - Date.now()) / 1000)) } }
+      );
+    }
+
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const { serviceName, date, timeSlot } = body;
+
+    const parsed = bookingSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const { serviceName, date, timeSlot, notes } = parsed.data;
 
     const [business] = await db.select().from(businesses).where(eq(businesses.id, id)).limit(1);
     if (!business) {
-      return NextResponse.json({ error: "Business not found" }, { status: 404 });
+      return NextResponse.json({ success: false, error: "Business not found" }, { status: 404 });
     }
 
-    const bookingRef = `BK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const userId = await getCurrentUserId();
+    const bookingRef = `BK-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const bookingId = crypto.randomUUID();
 
-    return NextResponse.json({
-      success: true,
-      bookingRef,
-      businessName: business.name,
-      serviceName: serviceName || "General Consultation / Session",
-      date: date || "Tomorrow",
-      timeSlot: timeSlot || "10:30 AM",
-      message: `Confirmed booking at ${business.name}. Cal invitation and directions dispatched.`,
-    });
+    const [booking] = await db
+      .insert(bookings)
+      .values({
+        id: bookingId,
+        businessId: business.id,
+        userId,
+        serviceName,
+        date,
+        timeSlot,
+        notes: notes || null,
+        status: "confirmed",
+        bookingRef,
+      })
+      .returning();
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: { bookingRef, booking },
+        bookingRef,
+        booking,
+        businessName: business.name,
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("POST /api/businesses/[id]/book error:", err);
-    return NextResponse.json({ error: "Failed to book appointment" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Failed to book appointment" }, { status: 500 });
   }
 }

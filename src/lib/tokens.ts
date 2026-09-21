@@ -1,0 +1,47 @@
+// Kinara Design Tokens — Deep Emerald + Warm Gold + Deep Indigo + Slate
+export const tokens = {
+  colors: {
+    bg: "#070c0e",
+    surface: "#0c1616",
+    surfaceElevated: "#112020",
+    emerald: "#059669",
+    emeraldBright: "#10b981",
+    emeraldDeep: "#022c22",
+    gold: "#f59e0b",
+    goldWarm: "#d97706",
+    goldLight: "#fde68a",
+    indigo: "#1e1b4b",
+    indigoLight: "#4338ca",
+    slate: "#475569",
+    slateLight: "#94a3b8",
+    slateDark: "#1e293b",
+  },
+  radius: {
+    sm: "12px",
+    md: "16px",
+    lg: "20px",
+    xl: "24px",
+    full: "9999px",
+  },
+  spacing: {
+    1: "4px",
+    2: "8px",
+    3: "12px",
+    4: "16px",
+    5: "20px",
+    6: "24px",
+    8: "32px",
+  },
+  shadow: {
+    card: "0 12px 28px -8px rgba(0,0,0,0.6), 0 0 20px -5px rgba(16,185,129,0.15)",
+    dropdown: "0 20px 40px -15px rgba(0,0,0,0.7)",
+  },
+  typography: {
+    fontSans: "Geist, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    h1: "text-3xl md:text-4xl font-black tracking-tight",
+    h2: "text-xl font-bold tracking-tight",
+    h3: "text-lg font-semibold",
+    body: "text-sm leading-relaxed",
+    label: "text-xs font-mono uppercase tracking-widest",
+  },
+} as const;

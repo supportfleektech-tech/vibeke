@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   Users,
@@ -23,6 +25,7 @@ import {
 import { CommunityItem, PostItem, UserProfile } from "@/types";
 import { PostCard } from "@/components/feed/PostCard";
 import { PostComposer } from "@/components/feed/PostComposer";
+import { toast } from "sonner";
 
 interface CommunityViewProps {
   communities: CommunityItem[];
@@ -108,7 +111,7 @@ export function CommunityView({
                 : "bg-black/30 hover:bg-white/5 text-slate-400 border-white/5"
             }`}
           >
-            <img src={c.avatar} alt={c.name} className="w-5 h-5 rounded-md object-cover" />
+            <Image src={c.avatar} alt={c.name} className="w-5 h-5 rounded-md object-cover" width={20} height={20} unoptimized loading="lazy" />
             <span>{c.name}</span>
             {c.activeVoice && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -120,22 +123,18 @@ export function CommunityView({
       {/* Community Banner & Identity Header */}
       <div className="kinara-card rounded-3xl overflow-hidden border border-emerald-500/20 relative">
         <div className="h-44 sm:h-56 relative w-full overflow-hidden bg-emerald-950">
-          <img
-            src={currentCommunity.banner}
+          <Image src={currentCommunity.banner}
             alt={currentCommunity.name}
-            className="w-full h-full object-cover brightness-75"
-          />
+            className="w-full h-full object-cover brightness-75" width={600} height={400} unoptimized loading="lazy" sizes="100vw" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a1413] via-[#0a1413]/60 to-transparent" />
         </div>
 
         <div className="p-5 sm:p-6 -mt-16 sm:-mt-20 relative z-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
             <div className="flex items-end gap-4">
-              <img
-                src={currentCommunity.avatar}
+              <Image src={currentCommunity.avatar}
                 alt={currentCommunity.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-[#0a1413] shadow-2xl"
-              />
+                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-[#0a1413] shadow-2xl" width={80} height={80} unoptimized loading="lazy" />
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-extrabold text-white">
@@ -179,7 +178,7 @@ export function CommunityView({
               </button>
 
               <button
-                onClick={() => alert(`Link to ${currentCommunity.name} copied to clipboard!`)}
+                onClick={() => { navigator.clipboard?.writeText(window.location.href).catch(() => {}); toast.success(`Link to ${currentCommunity.name} copied to clipboard!`); }}
                 className="p-2.5 rounded-xl bg-black/40 hover:bg-white/5 border border-white/5 text-slate-300 transition"
                 title="Share Community"
               >
@@ -262,15 +261,13 @@ export function CommunityView({
               ].map((speaker, idx) => (
                 <div key={idx} className="flex flex-col items-center text-center group">
                   <div className="relative mb-2">
-                    <img
-                      src={speaker.avatar}
+                    <Image src={speaker.avatar}
                       alt={speaker.name}
                       className={`w-16 h-16 rounded-2xl object-cover ring-2 ${
                         speaker.speaking
                           ? "ring-emerald-400 voice-pulse shadow-lg shadow-emerald-500/40"
                           : "ring-emerald-950/60"
-                      }`}
-                    />
+                      }`} width={400} height={300} unoptimized loading="lazy" sizes="(max-width: 768px) 100vw, 400px" />
                     {speaker.speaking && (
                       <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-black p-1 rounded-full text-[10px]">
                         <Volume2 className="w-3 h-3" />
@@ -327,7 +324,7 @@ export function CommunityView({
             </div>
 
             <button
-              onClick={() => alert("Audio session minimized to background audio player.")}
+              onClick={() => toast.info("Audio session minimized to background audio player.")}
               className="px-3 py-1.5 rounded-lg text-xs bg-rose-950/60 text-rose-300 border border-rose-800/40 hover:bg-rose-900 transition"
             >
               Quietly Leave
@@ -358,7 +355,7 @@ export function CommunityView({
           <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             {chatMessages.map((msg, idx) => (
               <div key={idx} className="flex items-start gap-3">
-                <img src={msg.avatar} alt={msg.user} className="w-8 h-8 rounded-xl object-cover shrink-0" />
+                <Image src={msg.avatar} alt={msg.user} className="w-8 h-8 rounded-xl object-cover shrink-0" width={32} height={32} unoptimized loading="lazy" />
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-white">{msg.user}</span>
@@ -436,7 +433,7 @@ export function CommunityView({
                 </div>
               </div>
               <button
-                onClick={() => alert(`Downloading "${file.title}"...`)}
+                onClick={() => toast.info(`Downloading "${file.title}"...`)}
                 className="p-2 rounded-lg bg-black/40 hover:bg-emerald-950 text-slate-300 hover:text-emerald-300 transition"
               >
                 <Download className="w-4 h-4" />
@@ -477,7 +474,7 @@ export function CommunityView({
                 </div>
               </div>
               <button
-                onClick={() => alert(`RSVP registered for ${ev.title}!`)}
+                onClick={() => toast.success(`RSVP registered for ${ev.title}!`)}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-xs transition"
               >
                 RSVP ({ev.attendees} Attending)
@@ -498,7 +495,7 @@ export function CommunityView({
             This channel is autonomously indexed by Kinara Edge LLM. It generates real-time audio transcripts, flags non-constructive behavior, and synthesizes key architecture conclusions.
           </p>
           <div className="p-3 bg-emerald-950/30 rounded-xl border border-emerald-800/30 text-xs text-emerald-200">
-            <strong>Today's Voice Lounge Summary:</strong> The room concluded that offline SQLite + CRDTs provide the highest resilience for East African point-of-sale systems during fiber outages.
+            <strong>Today&apos;s Voice Lounge Summary:</strong> The room concluded that offline SQLite + CRDTs provide the highest resilience for East African point-of-sale systems during fiber outages.
           </div>
         </div>
       )}

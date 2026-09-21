@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import { Briefcase, MapPin, DollarSign, Clock, ShieldCheck, Check, Sparkles } from "lucide-react";
 import { JobListing } from "@/types";
@@ -75,11 +77,9 @@ export function JobsView({ jobs, selectedCity }: JobsViewProps) {
               className="kinara-card p-5 rounded-2xl border border-white/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group hover:border-emerald-500/40 transition"
             >
               <div className="flex items-start gap-4">
-                <img
-                  src={job.companyLogo}
+                <Image src={job.companyLogo}
                   alt={job.company}
-                  className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/20 shrink-0"
-                />
+                  className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/20 shrink-0" width={48} height={48} unoptimized loading="lazy" />
                 <div className="space-y-1">
                   <h3 className="text-sm font-bold text-white group-hover:text-emerald-300 transition">
                     {job.title}

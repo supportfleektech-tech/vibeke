@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   Send,
@@ -184,11 +186,9 @@ export function MessagingView({ initialMessages, user }: MessagingViewProps) {
                 }`}
               >
                 <div className="relative">
-                  <img
-                    src={thread.avatar}
+                  <Image src={thread.avatar}
                     alt={thread.name}
-                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 shrink-0"
-                  />
+                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-emerald-500/30 shrink-0" width={40} height={40} unoptimized loading="lazy" />
                   <span className="absolute -bottom-1 -right-1 bg-[#060b0b] rounded-full p-0.5">
                     <ShieldCheck className="w-3 h-3 text-amber-400" />
                   </span>
@@ -215,11 +215,9 @@ export function MessagingView({ initialMessages, user }: MessagingViewProps) {
         {/* Conversation Header */}
         <div className="p-4 border-b border-emerald-950/60 flex items-center justify-between bg-[#081212]">
           <div className="flex items-center gap-3">
-            <img
-              src={activeThread.avatar}
+            <Image src={activeThread.avatar}
               alt={activeThread.name}
-              className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/30"
-            />
+              className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/30" width={36} height={36} unoptimized loading="lazy" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-white">{activeThread.name}</span>

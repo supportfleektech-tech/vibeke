@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import React, { useState } from "react";
 import {
   ShieldCheck,
@@ -20,6 +22,7 @@ import {
 } from "lucide-react";
 import { UserProfile, PostItem } from "@/types";
 import { PostCard } from "@/components/feed/PostCard";
+import { Progress } from "@/components/ui/progress";
 
 interface ProfileViewProps {
   user: UserProfile | null;
@@ -65,11 +68,9 @@ export function ProfileView({ user, posts, onUpdateBio }: ProfileViewProps) {
       {/* Cover & Profile Header Card */}
       <div className="kinara-card rounded-3xl overflow-hidden border border-emerald-500/20 relative">
         <div className="h-48 sm:h-60 relative w-full overflow-hidden bg-black">
-          <img
-            src={user.cover}
+          <Image src={user.cover}
             alt="Cover"
-            className="w-full h-full object-cover brightness-75"
-          />
+            className="w-full h-full object-cover brightness-75" width={600} height={400} unoptimized loading="lazy" sizes="100vw" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#091212] via-[#091212]/40 to-transparent" />
         </div>
 
@@ -77,11 +78,9 @@ export function ProfileView({ user, posts, onUpdateBio }: ProfileViewProps) {
           <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-5">
             <div className="flex items-end gap-4">
               <div className="relative">
-                <img
-                  src={user.avatar}
+                <Image src={user.avatar}
                   alt={user.name}
-                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover ring-4 ring-[#091212] shadow-2xl"
-                />
+                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover ring-4 ring-[#091212] shadow-2xl" width={96} height={96} unoptimized loading="lazy" />
                 <span className="absolute -bottom-1 -right-1 bg-[#091212] rounded-full p-1">
                   <ShieldCheck className="w-5 h-5 text-amber-400 fill-amber-400/20" />
                 </span>
@@ -267,22 +266,32 @@ export function ProfileView({ user, posts, onUpdateBio }: ProfileViewProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-1">
+            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-2">
               <div className="text-[10px] uppercase font-bold text-emerald-400">Identity Verification</div>
               <div className="text-sm font-bold text-white">National ID + Biometric</div>
-              <div className="text-[10px] text-emerald-300">Verified by Republic of Kenya eCitizen</div>
+              <Progress value={100} className="h-2" indicatorClassName="bg-emerald-500" />
+              <div className="text-[10px] text-emerald-300">Verified by Republic of Kenya eCitizen • 100%</div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-1">
+            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-2">
               <div className="text-[10px] uppercase font-bold text-amber-400">Escrow Fulfillments</div>
               <div className="text-sm font-bold text-white">142 Orders / 0 Disputes</div>
+              <Progress value={100} className="h-2" indicatorClassName="bg-amber-500" />
               <div className="text-[10px] text-slate-400">100% on-time handover rate</div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-1">
+            <div className="p-4 rounded-2xl bg-black/40 border border-emerald-950 space-y-2">
               <div className="text-[10px] uppercase font-bold text-emerald-400">Community Standing</div>
               <div className="text-sm font-bold text-white">Top 0.1% Contributor</div>
-              <div className="text-[10px] text-slate-400">Silicon Savannah Innovators Hub</div>
+              <Progress value={98} className="h-2" />
+              <div className="text-[10px] text-slate-400">Silicon Savannah Innovators Hub • 98%</div>
+            </div>
+          </div>
+          <div className="space-y-3 pt-2">
+            <Progress value={98} className="h-2.5" indicatorClassName="bg-gradient-to-r from-emerald-500 to-amber-500" />
+            <div className="flex justify-between text-[11px] font-mono text-slate-400">
+              <span>Overall Sovereign Trust</span>
+              <span className="text-emerald-300">98 / 100</span>
             </div>
           </div>
         </div>
