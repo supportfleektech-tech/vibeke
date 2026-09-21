@@ -149,11 +149,118 @@ export type DashboardSectionKey =
   | "jobs"
   | "marketplace"
   | "cinema"
-  | "messages";
+  | "messages"
+  | "clips"
+  | "stories"
+  | "live"
+  | "explore";
 
 export interface DashboardSectionConfig {
   id: DashboardSectionKey;
   label: string;
   icon: string;
   visible: boolean;
+}
+
+export interface ClipItem {
+  id: number;
+  authorId: string;
+  authorName: string;
+  authorHandle: string;
+  authorAvatar: string;
+  authorVerified: boolean;
+  title: string;
+  description: string;
+  videoUrl: string;
+  thumbnailUrl: string;
+  sound: string;
+  soundTitle: string;
+  durationSec: number;
+  likes: number;
+  commentsCount: number;
+  sharesCount: number;
+  bookmarksCount: number;
+  views: number;
+  hashtags: string[] | string;
+  city: string;
+  featured: boolean;
+  createdAt: string;
+}
+
+export interface StoryItem {
+  id: number;
+  authorId: string;
+  authorName: string;
+  authorHandle: string;
+  authorAvatar: string;
+  mediaUrl: string;
+  mediaType: "image" | "video";
+  caption: string;
+  expiresAt: string;
+  viewedBy: string[] | string;
+  createdAt: string;
+}
+
+export interface LiveItem {
+  id: string;
+  hostId: string;
+  hostName: string;
+  hostHandle: string;
+  hostAvatar: string;
+  title: string;
+  category: string;
+  description: string;
+  thumbnail: string;
+  status: "live" | "ended";
+  viewersCount: number;
+  likes: number;
+  startedAt: string;
+  endedAt?: string | null;
+}
+
+export interface HashtagItem {
+  tag: string;
+  count: number;
+  trendingScore: number;
+  category: string;
+  updatedAt: string;
+}
+
+export interface NotificationItem {
+  id: number;
+  userId: string;
+  actorId?: string | null;
+  actorName: string;
+  actorAvatar: string;
+  type: string;
+  entityType: string;
+  entityId: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface BookmarkItem {
+  id: number;
+  userId: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
+
+export interface EventItem {
+  id: string;
+  title: string;
+  description: string;
+  banner: string;
+  location: string;
+  city: string;
+  category: string;
+  startAt: string;
+  endAt: string;
+  organizerId?: string | null;
+  attendeesCount: number;
+  maxAttendees: number;
+  price: number;
+  createdAt: string;
 }

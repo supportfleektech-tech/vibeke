@@ -19,7 +19,9 @@
 
 > **Don't aim to be "the next Instagram." Aim to be the first premium African-designed digital platform.**
 
-KINARA weaves **Apple's polish**, **Linear's speed**, **Notion's organization**, **Spotify's personalization**, **Discord's communities**, **Google Maps' local discovery**, and **Figma's clean interface** into a single sovereign operating system for Africa's 1.4B people — built mobile-first, offline-aware, and trust-native.
+KINARA weaves **Apple's polish**, **Linear's speed**, **Notion's organization**, **Spotify's personalization**, **Discord's communities**, **Google Maps' local discovery**, **Figma's clean interface** — plus **TikTok's Clips**, **Instagram's Stories**, **YouTube Live**, **X's Explore**, and **LinkedIn's Jobs** — into a single **ALL-IN-ONE sovereign operating system** for Africa's 1.4B people — built mobile-first, offline-aware, and trust-native.
+
+> **v3.0.0 ALL-IN-ONE:** `🎞️ Clips` vertical TikTok feed + `🟢 Stories` 24h + `🔴 Live Stages` + `🧭 Explore` masonry + `🔔 Notifications` + `🔖 Bookmarks` + `📅 Events` — all free, no vendor lock-in.
 
 ---
 
@@ -135,6 +137,20 @@ Threads (`direct | community | business | marketplace`) with `threadId`, `partic
 ### 10. Jobs
 
 Categorized listings (Tech/Design/Ops etc) with location (supports `"Nairobi (Kilimani) / Remote Pan-Africa"` via `ilike`), salary bands, tags jsonb. Apply creates `job_applications` with unique `(jobId, applicantId)` constraint and race-safe 409 handling.
+
+### 11. ALL-IN-ONE — TikTok Clips + Stories + Live + Explore + Notifications
+
+| Feature | What it replicates | Kinara twist |
+|---------|-------------------|--------------|
+| **🎞️ Clips** | TikTok vertical feed, Reels, Shorts | `ClipsView` `snap-y` + `IntersectionObserver` autoplay muted loop, double-tap heart burst `motion`, right rail like/comment/share/bookmark/sound disc, bottom `avatar+Follow+title+hashtags+sound marquee`, tabs `For You` (trending `likes*2+views`) vs `Following`, hashtag filter, `POST /api/clips/[id]/like` tx + `POST /api/bookmarks` — 5 seeded clips `BigBuckBunny` etc |
+| **🟢 Stories** | Instagram/Snapchat 24h | `StoriesBar` horizontal `emerald` vs `slate` rings, `StoryViewer` `fixed inset-0` `role=dialog` progress `motion` 5s/story `setInterval 50ms`, tap halves/swipe `50px`/`Arrow`/`Escape`, hold pause, `POST /api/stories/[id]/view` after 2s — 4 seeded stories 22h/18h/10h/8h expiry |
+| **🔴 Live** | YouTube Live, Clubhouse Stages | `LiveView` grid pulsing `LIVE` badge, Go Live modal `POST /api/lives` + Join `POST /api/lives/[id]/join` viewers++ + chat + gifts `AnimatePresence`, End `POST /api/lives/[id]/end` — 3 seeded lives 342/892/210 viewers |
+| **🧭 Explore** | X Explore, Instagram Explore | `ExploreView` masonry `columns-1 sm:2 lg:3` clips/posts/people + `#Tag` pills `GET /api/hashtags/trending` 6 tags `KinaraClips 9800` etc, tabs All/Clips/Posts/People/Tags, `For You` shuffles `trendingScore` |
+| **🔔 Notifications** | All platforms activity | `NotificationsView` SWR `15s` polling `GET /api/notifications?limit=20` `unreadCount` badge, Mark all `POST /api/notifications/read {ids:"all"}`, tabs All/Unread/Mentions — 3 seeded `like/live/comment` |
+| **🔖 Bookmarks** | Saves, Collections | `BookmarksView` tabs All/Post/Clip/Marketplace/Job `grid/list` + toggle `POST /api/bookmarks {entityType,entityId}` + `GREATEST` |
+| **📅 Events** | Facebook Events, Meetup | `EventsView` `GET /api/events` grid banner+date+price `FREE`/`KES`, RSVP `POST /api/events/[id]/rsvp {action:"join"|"leave"}` capacity bar — 2 seeded `Demo Night 180/250` `Sound Lab 89/120` |
+
+All 7 integrate into `DynamicHome` stories+clips peek + `Sidebar` 7 new nav `Clips/Live/Explore/Stories/Events/Notifications/Bookmarks` + persona 12-section configs (creator shows clips/stories/live/explore).
 
 ---
 

@@ -13,6 +13,7 @@ import { MarketplaceView } from "@/components/marketplace/MarketplaceView";
 import { BusinessView } from "@/components/business/BusinessView";
 import { JobsView } from "@/components/jobs/JobsView";
 import { ProfileView } from "@/components/profile/ProfileView";
+import { StoriesBar } from "@/components/stories/StoriesBar";
 import { fetcher } from "@/lib/fetcher";
 import {
   UserProfile,
@@ -24,7 +25,11 @@ import {
   JobListing,
   RadarPin,
   PersonaRole,
-  DashboardSectionConfig
+  DashboardSectionConfig,
+  ClipItem,
+  LiveItem,
+  NotificationItem,
+  EventItem,
 } from "@/types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,7 +45,7 @@ function SkeletonCard() {
   );
 }
 
-// Dynamic imports for heavy views
+// Dynamic imports for heavy views (ALL-IN-ONE)
 const DynamicHome = dynamic(() => import("@/components/dashboard/DynamicHome").then(m => m.DynamicHome), {
   loading: () => <SkeletonCard />,
 });
@@ -55,9 +60,31 @@ const KinaraAICopilot = dynamic(() => import("@/components/ai/KinaraAICopilot").
   loading: () => <SkeletonCard />,
   ssr: false,
 });
+const ClipsView = dynamic(() => import("@/components/clips/ClipsView").then(m => m.ClipsView), {
+  loading: () => <SkeletonCard />,
+});
+const LiveView = dynamic(() => import("@/components/live/LiveView").then(m => m.LiveView), {
+  loading: () => <SkeletonCard />,
+});
+const ExploreView = dynamic(() => import("@/components/explore/ExploreView").then(m => m.ExploreView), {
+  loading: () => <SkeletonCard />,
+});
+const NotificationsView = dynamic(() => import("@/components/notifications/NotificationsView").then(m => m.NotificationsView), {
+  loading: () => <SkeletonCard />,
+});
+const BookmarksView = dynamic(() => import("@/components/bookmarks/BookmarksView").then(m => m.BookmarksView), {
+  loading: () => <SkeletonCard />,
+});
+const EventsView = dynamic(() => import("@/components/events/EventsView").then(m => m.EventsView), {
+  loading: () => <SkeletonCard />,
+});
 
 const DEFAULT_SECTIONS: DashboardSectionConfig[] = [
   { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
+  { id: "stories", label: "Stories (24h Ephemeral)", icon: "🟢", visible: true },
+  { id: "clips", label: "Kinara Clips — TikTok Feed", icon: "🎞️", visible: true },
+  { id: "live", label: "Live Now — Sovereign Stages", icon: "🔴", visible: true },
+  { id: "explore", label: "Explore & Trending Hashtags", icon: "🧭", visible: true },
   { id: "trending", label: "Trending Pulses & Dispatches", icon: "🔥", visible: true },
   { id: "radar", label: "Local Radar & Proximity Map", icon: "📍", visible: true },
   { id: "communities", label: "Communities & Live Audio", icon: "👥", visible: true },
@@ -94,7 +121,7 @@ export default function KinaraApp() {
   const [sectionsConfig, setSectionsConfig] = useState<DashboardSectionConfig[]>(DEFAULT_SECTIONS);
   const [hasHydrated, setHasHydrated] = useState(false);
 
-  // SWR data fetching for 8 endpoints with caching
+  // SWR data fetching for 14 endpoints with caching (ALL-IN-ONE)
   const { data: userData, isLoading: userLoading } = useSWR<{ user: UserProfile }>("/api/user", fetcher, swrConfig);
   const { data: postsData, isLoading: postsLoading } = useSWR<{ posts: PostItem[]; nextCursor?: string | null }>("/api/posts?limit=20", fetcher, swrConfig);
   const { data: communitiesData, isLoading: commLoading } = useSWR<{ communities: CommunityItem[] }>("/api/communities", fetcher, swrConfig);
@@ -103,6 +130,10 @@ export default function KinaraApp() {
   const { data: messagesData, isLoading: msgLoading } = useSWR<{ messages: MessageItem[] }>("/api/messages", fetcher, swrConfig);
   const { data: jobsData, isLoading: jobsLoading } = useSWR<{ jobs: JobListing[] }>("/api/jobs", fetcher, swrConfig);
   const { data: radarData, isLoading: radarLoading } = useSWR<{ radar: RadarPin[] }>("/api/radar", fetcher, swrConfig);
+  const { data: clipsData, isLoading: clipsLoading } = useSWR<{ clips: ClipItem[] }>("/api/clips?limit=10&sort=trending", fetcher, swrConfig);
+  const { data: livesData, isLoading: livesLoading } = useSWR<{ lives: LiveItem[] }>("/api/lives?status=live&limit=6", fetcher, swrConfig);
+  const { data: notificationsData } = useSWR<{ notifications: NotificationItem[]; unreadCount?: number }>("/api/notifications?limit=20", fetcher, { ...swrConfig, refreshInterval: 15000 });
+  const { data: eventsData, isLoading: eventsLoading } = useSWR<{ events: EventItem[] }>("/api/events?limit=6", fetcher, swrConfig);
 
   const isInitialLoading = userLoading || postsLoading || commLoading || marketLoading || bizLoading || msgLoading || jobsLoading || radarLoading;
 
@@ -115,6 +146,10 @@ export default function KinaraApp() {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [jobs, setJobs] = useState<JobListing[]>([]);
   const [radar, setRadar] = useState<RadarPin[]>([]);
+  const [clips, setClips] = useState<ClipItem[]>([]);
+  const [lives, setLives] = useState<LiveItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [postsNextCursor, setPostsNextCursor] = useState<string | null>(null);
   const [marketNextCursor, setMarketNextCursor] = useState<string | null>(null);
 
@@ -150,9 +185,31 @@ export default function KinaraApp() {
   useEffect(() => {
     if (radarData?.radar) setRadar(radarData.radar);
   }, [radarData]);
+  useEffect(() => {
+    const d = clipsData as any;
+    if (d?.clips) setClips(d.clips);
+    else if (Array.isArray(d)) setClips(d);
+  }, [clipsData]);
+  useEffect(() => {
+    const d = livesData as any;
+    if (d?.lives) setLives(d.lives);
+    else if (Array.isArray(d)) setLives(d);
+  }, [livesData]);
+  useEffect(() => {
+    if ((notificationsData as any)?.notifications) setNotifications((notificationsData as any).notifications);
+  }, [notificationsData]);
+  useEffect(() => {
+    const d = eventsData as any;
+    if (d?.events) setEvents(d.events);
+    else if (Array.isArray(d?.data)) setEvents(d.data);
+  }, [eventsData]);
 
-  // Derived unreadCount from messages (not hardcoded)
-  const unreadCount = useMemo(() => messages.filter((m) => !m.isMe).length, [messages]);
+  // Derived unreadCount from messages + notifications (not hardcoded)
+  const unreadCount = useMemo(() => {
+    const msgUnread = messages.filter((m) => !m.isMe).length;
+    const notifUnread = notifications.filter((n) => !n.read).length;
+    return msgUnread + notifUnread;
+  }, [messages, notifications]);
 
   // Aria live toast state for screen readers
   const [liveToast, setLiveToast] = useState<string>("");
@@ -251,6 +308,10 @@ export default function KinaraApp() {
     if (newRole === "creator") {
       setSectionsConfig([
         { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
+        { id: "stories", label: "Stories (24h)", icon: "🟢", visible: true },
+        { id: "clips", label: "Kinara Clips — TikTok Feed", icon: "🎞️", visible: true },
+        { id: "live", label: "Live Now — Sovereign Stages", icon: "🔴", visible: true },
+        { id: "explore", label: "Explore & Hashtags", icon: "🧭", visible: true },
         { id: "cinema", label: "KINARA Cinema & Creative Spotlights", icon: "🎬", visible: true },
         { id: "communities", label: "Communities & Live Audio Lounges", icon: "👥", visible: true },
         { id: "trending", label: "Trending Pulses & Dispatches", icon: "🔥", visible: true },
@@ -262,29 +323,41 @@ export default function KinaraApp() {
     } else if (newRole === "business") {
       setSectionsConfig([
         { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
+        { id: "clips", label: "Clips — Product Demos", icon: "🎞️", visible: false },
         { id: "marketplace", label: "Curated Escrow Marketplace", icon: "🛒", visible: true },
+        { id: "live", label: "Live Commerce & Stages", icon: "🔴", visible: true },
         { id: "messages", label: "Direct Dispatches & Orders", icon: "💬", visible: true },
         { id: "radar", label: "Local Radar & Commercial Nodes", icon: "📍", visible: true },
+        { id: "explore", label: "Explore & Hashtags", icon: "🧭", visible: true },
         { id: "trending", label: "Trending Pulses & Dispatches", icon: "🔥", visible: true },
         { id: "communities", label: "Communities & Live Audio", icon: "👥", visible: true },
         { id: "jobs", label: "Opportunities & Careers", icon: "💼", visible: true },
         { id: "cinema", label: "KINARA Cinema & Spotlights", icon: "🎬", visible: false },
+        { id: "stories", label: "Stories", icon: "🟢", visible: true },
       ]);
     } else if (newRole === "student") {
       setSectionsConfig([
         { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
+        { id: "stories", label: "Stories — Campus", icon: "🟢", visible: true },
+        { id: "clips", label: "Clips — Study Hacks", icon: "🎞️", visible: true },
+        { id: "explore", label: "Explore & Hashtags", icon: "🧭", visible: true },
         { id: "communities", label: "Study Pods & Communities", icon: "👥", visible: true },
         { id: "jobs", label: "Fellowships & Hackathons", icon: "💼", visible: true },
         { id: "trending", label: "Trending Pulses & Dispatches", icon: "🔥", visible: true },
         { id: "radar", label: "Local Radar & Study Spaces", icon: "📍", visible: true },
         { id: "cinema", label: "KINARA Cinema & Tech Spotlights", icon: "🎬", visible: true },
+        { id: "live", label: "Live — Campus Stages", icon: "🔴", visible: true },
         { id: "marketplace", label: "Curated Escrow Marketplace", icon: "🛒", visible: false },
         { id: "messages", label: "Direct Dispatches Preview", icon: "💬", visible: true },
       ]);
     } else if (newRole === "buyer") {
       setSectionsConfig([
         { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
+        { id: "clips", label: "Clips — Hauls & Reviews", icon: "🎞️", visible: true },
+        { id: "stories", label: "Stories — Drops", icon: "🟢", visible: true },
+        { id: "explore", label: "Explore & Hashtags", icon: "🧭", visible: true },
         { id: "marketplace", label: "Curated Escrow Marketplace", icon: "🛒", visible: true },
+        { id: "live", label: "Live — Drops & Shopping", icon: "🔴", visible: false },
         { id: "radar", label: "Nearby Drops & Artisan Studios", icon: "📍", visible: true },
         { id: "trending", label: "Trending Pulses & Dispatches", icon: "🔥", visible: true },
         { id: "messages", label: "Direct Dispatches Preview", icon: "💬", visible: true },
@@ -391,21 +464,72 @@ export default function KinaraApp() {
         {/* Center / Primary Stage */}
         <main id="main-content" className="flex-1 p-3 sm:p-6 md:p-8 min-w-0 max-w-5xl mx-auto">
           {currentView === "home" && (
-            <DynamicHome
-              user={user}
-              posts={posts}
-              communities={communities}
-              products={products}
-              jobs={jobs}
-              radar={radar}
-              messages={messages}
-              sectionsConfig={sectionsConfig}
-              currentPersona={currentPersona}
-              selectedCity={selectedCity}
-              onNavigate={handleNavigate}
-              onPostCreated={handlePostCreated}
-              onOpenCustomizer={() => setIsCustomizerOpen(true)}
-            />
+            <div className="space-y-6">
+              <StoriesBar />
+              <DynamicHome
+                user={user}
+                posts={posts}
+                communities={communities}
+                products={products}
+                jobs={jobs}
+                radar={radar}
+                messages={messages}
+                sectionsConfig={sectionsConfig}
+                currentPersona={currentPersona}
+                selectedCity={selectedCity}
+                onNavigate={handleNavigate}
+                onPostCreated={handlePostCreated}
+                onOpenCustomizer={() => setIsCustomizerOpen(true)}
+              />
+              {/* ALL-IN-ONE preview: Clips + Live peek on home */}
+              {clips.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold flex items-center gap-2"><span>🎞️</span> Kinara Clips — Trending</h3>
+                    <button onClick={() => handleNavigate("clips")} className="text-xs text-emerald-400 hover:text-emerald-300">View All →</button>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto scrollbar-none pb-2">
+                    {clips.slice(0,5).map((c) => (
+                      <div key={c.id} onClick={() => handleNavigate("clips")} className="min-w-[160px] h-[240px] rounded-2xl overflow-hidden relative kinara-card cursor-pointer group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={c.thumbnailUrl} alt={c.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <p className="text-xs font-bold line-clamp-2 text-white">{c.title}</p>
+                          <p className="text-[10px] text-white/70">{c.views.toLocaleString()} views • {c.likes.toLocaleString()} ♥</p>
+                        </div>
+                        <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 flex items-center justify-center">
+                          <span className="text-xs">▶</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {lives.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold flex items-center gap-2"><span>🔴</span> Live Now</h3>
+                    <button onClick={() => handleNavigate("live")} className="text-xs text-emerald-400 hover:text-emerald-300">View All →</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {lives.slice(0,3).map((l) => (
+                      <div key={l.id} onClick={() => handleNavigate("live")} className="kinara-card rounded-2xl overflow-hidden cursor-pointer">
+                        <div className="h-28 relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={l.thumbnail} alt={l.title} className="w-full h-full object-cover" loading="lazy" />
+                          <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">LIVE • {l.viewersCount}</span>
+                        </div>
+                        <div className="p-3">
+                          <p className="text-xs font-bold line-clamp-1">{l.title}</p>
+                          <p className="text-[11px] text-slate-400">{l.hostName} • {l.category}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {currentView === "radar" && (
@@ -464,6 +588,44 @@ export default function KinaraApp() {
 
           {currentView === "ai" && (
             <KinaraAICopilot user={user} selectedCity={selectedCity} />
+          )}
+
+          {currentView === "stories" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-black flex items-center gap-2"><span className="text-emerald-400">🟢</span> Stories — 24h Ephemeral</h2>
+                <span className="text-xs text-slate-400">Tap to view • Hold to pause</span>
+              </div>
+              <StoriesBar />
+              <div className="kinara-card rounded-2xl p-6 text-center space-y-2">
+                <p className="text-sm font-bold">Stories disappear after 24h</p>
+                <p className="text-xs text-slate-400">Share moments, behind-the-scenes, drops. Your story is visible to your community for a day.</p>
+              </div>
+            </div>
+          )}
+
+          {currentView === "clips" && (
+            <ClipsView />
+          )}
+
+          {currentView === "live" && (
+            <LiveView />
+          )}
+
+          {currentView === "explore" && (
+            <ExploreView onNavigate={handleNavigate} />
+          )}
+
+          {currentView === "notifications" && (
+            <NotificationsView />
+          )}
+
+          {currentView === "bookmarks" && (
+            <BookmarksView />
+          )}
+
+          {currentView === "events" && (
+            <EventsView />
           )}
         </main>
       </div>

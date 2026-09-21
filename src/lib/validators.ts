@@ -57,3 +57,43 @@ export const paginationSchema = z.object({
   cursor: z.coerce.number().int().min(0).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
+
+export const clipCreateSchema = z.object({
+  title: z.string().min(3).max(100),
+  description: z.string().min(3).max(500),
+  videoUrl: z.string().url(),
+  thumbnailUrl: z.string().url(),
+  sound: z.string().max(100).optional().default("Original • Kinara"),
+  soundTitle: z.string().max(100).optional().default("Original sound"),
+  durationSec: z.coerce.number().int().min(1).max(180).default(15),
+  hashtags: z.array(z.string().max(30)).max(10).optional().default([]),
+  city: z.string().max(50).optional().default("Nairobi"),
+  featured: z.boolean().optional().default(false),
+});
+
+export const storyCreateSchema = z.object({
+  mediaUrl: z.string().url(),
+  mediaType: z.enum(["image", "video"]).default("image"),
+  caption: z.string().max(200).optional().default(""),
+  durationHours: z.coerce.number().int().min(1).max(24).default(24),
+});
+
+export const liveCreateSchema = z.object({
+  title: z.string().min(3).max(100),
+  category: z.string().min(1).max(50).default("General"),
+  description: z.string().max(500).optional().default(""),
+  thumbnail: z.string().url(),
+});
+
+export const eventCreateSchema = z.object({
+  title: z.string().min(3).max(100),
+  description: z.string().min(10).max(500),
+  banner: z.string().url(),
+  location: z.string().min(1).max(100),
+  city: z.string().min(1).max(50),
+  category: z.string().max(50).default("Tech"),
+  startAt: z.string().datetime().or(z.string().min(1)),
+  endAt: z.string().datetime().or(z.string().min(1)),
+  maxAttendees: z.coerce.number().int().min(1).max(10000).default(100),
+  price: z.coerce.number().int().min(0).default(0),
+}).refine((d) => new Date(d.endAt) > new Date(d.startAt), { message: "endAt must be after startAt", path: ["endAt"] });

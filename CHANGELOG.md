@@ -4,6 +4,27 @@ All notable changes to this project documented here. Follows [Keep a Changelog](
 
 ---
 
+## [3.0.0] — 2026-09-21 — ALL-IN-ONE (TikTok Clips + Stories + Live + Explore)
+
+### Added
+- **DB** — 9 new tables `clips` (22 cols, hashtags jsonb, views/bookmarks), `clipLikes` unique, `clipComments`, `stories` (expiresAt 24h, viewedBy jsonb), `lives` (uuid, hostId, viewersCount, status live/ended), `hashtags` (trendingScore), `notifications` (11 cols, read, entityType), `bookmarks` (unique user+entity), `events` (14 cols, startAt/endAt, attendees) + `drizzle/0001_lean_vision.sql` (9 tables, 24 total) + seed 5 clips (BigBuckBunny etc), 4 stories, 3 lives, 2 events, 6 hashtags, 3 notifications — `GET /api/health` `seeded:true` 70ms
+- **APIs** — `GET /api/clips?limit&sort=trending|recent|following&city&hashtag` + `POST /api/clips` (zod `clipCreateSchema`, hashtags upsert), `GET/POST /api/clips/[id]/like` toggle tx + `GET/POST /api/clips/[id]/comment` tx, `GET /api/stories` (expiresAt > now) + `POST /api/stories` + `POST /api/stories/[id]/view` (viewedBy), `GET /api/lives?status` + `POST /api/lives` (Go Live) + `POST /api/lives/[id]/join` viewers++ + `POST /api/lives/[id]/end`, `GET /api/hashtags/trending`, `GET/POST /api/notifications` + `POST /api/notifications/read` (mark all), `GET/POST /api/bookmarks` toggle + `GREATEST` bookmarksCount, `GET/POST /api/events` + `POST /api/events/[id]/rsvp` (join/leave), `GET /api/search` now covers clips/hashtags too — all `zod` + `rateLimit 5-30/min` + `200 {success}` + 429
+- **UI — Clips** — `src/components/clips/ClipsView.tsx` + `ClipCard.tsx` TikTok vertical `snap-y` 100vh, `IntersectionObserver` auto-play current, `video` muted loop `playsInline`, double-tap heart burst `motion AnimatePresence`, right rail `Heart/Message/Share/Bookmark/Music` disc `animate-spin-slow`, bottom `avatar+Follow+title+hashtags+sound marquee+city`, tabs `For You` (trending likes) vs `Following` (mock), `hashtagFilter` + keyboard `ArrowUp/Down Space M`, `POST /api/clips/[id]/like` + `POST /api/bookmarks` + clipboard `sonner`
+- **UI — Stories** — `StoriesBar.tsx` `useSWR /api/stories` 24h filter `expiresAt>now`, `Your Story` add emerald ring, gradient ring emerald vs slate for viewed, `StoryViewer.tsx` `fixed inset-0` `role=dialog`, progress `motion` 5s/story, `setInterval 50ms`, tap halves, swipe 50px, `ArrowLeft/Right Escape`, hold pause, `POST /api/stories/[id]/view` after 2s, `sonner`, `next/image`
+- **UI — Live/Explore/Notifications/Bookmarks/Events** — `LiveView.tsx` grid LIVE pulse emerald, Go Live modal `POST /api/lives`, Join `POST /api/lives/[id]/join` + chat + gifts `AnimatePresence`, `ExploreView.tsx` masonry `columns-1 sm:2 lg:3` clips/posts/people + `#Tag` pills `hashtags/trending`, `NotificationsView.tsx` SWR `15s` polling `unreadCount` badge + tabs All/Unread/Mentions + `POST /api/notifications/read`, `BookmarksView.tsx` tabs All/Post/Clip/Marketplace/Job `grid/list` + toggle, `EventsView.tsx` `hashtags` etc via `GET /api/events` + `POST /api/events/[id]/rsvp` capacity bar — all `kinara-card` `emerald` `motion`
+- **Integration** — `src/types/index.ts` 7 new interfaces `ClipItem/StoryItem/LiveItem/HashtagItem/NotificationItem/BookmarkItem/EventItem` + `DashboardSectionKey` `clips|stories|live|explore`, `src/app/page.tsx` SWR 14 endpoints (clips,lives,notifications,events) + `unreadCount` msg+notif + `hasHydrated` + home `StoriesBar` + `Clips peek 5` + `Live peek 3` + `currentView` cases `clips|live|explore|notifications|bookmarks|events|stories`, `src/components/layout/Sidebar.tsx` 7 new nav `Clips TikTok`, `Live Stages`, `Explore #Trending`, `Stories 24h`, `Events 2`, `Notifications`, `Bookmarks` + `LayoutDashboard` etc 15 total + `CircleDashed Clapperboard Video` etc icons, persona `handleSelectPersona` now 12 sections per role (creator shows clips/stories/live/explore)
+- **Validators** — `src/lib/validators.ts` + `clipCreateSchema/storyCreateSchema/liveCreateSchema/eventCreateSchema` + `refine endAt>startAt`
+
+### Changed
+- `package.json` already `zod/next-auth/ai/motion/leaflet/swr/sonner/dnd` — no new deps needed for ALL-IN-ONE (reused)
+- `src/app/globals.css` already had `.touch-target` + `animate-spin-slow` + `kinara-card` used by new UIs
+
+### Fixed
+- `pnpm build --webpack` still `✓ Compiled 54s` + `tsc 0` + `vitest 8/8` after 9 new tables + 12 new routes + 7 new UIs
+- `GET /api/search?q?limit=2` now needs quoted `"?limit=2"` in zsh (glob fix) — docs updated with quotes
+
+---
+
 ## [2.0.0] — 2026-09-21 — Sovereign Sweep (10 Phases)
 
 ### Added

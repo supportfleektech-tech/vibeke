@@ -15,7 +15,16 @@ import {
   Shield,
   Layers,
   Flame,
-  Award
+  Award,
+  Clapperboard,
+  CircleDashed,
+  Video,
+  Search,
+  Bell,
+  Bookmark,
+  Calendar,
+  Telescope,
+  Zap
 } from "lucide-react";
 import { PersonaRole } from "@/types";
 
@@ -46,6 +55,34 @@ export function Sidebar({
       highlight: false,
     },
     {
+      id: "clips",
+      label: "Kinara Clips",
+      icon: Clapperboard,
+      badge: "TikTok",
+      badgeColor: "bg-pink-500/20 text-pink-300",
+    },
+    {
+      id: "live",
+      label: "Live Stages",
+      icon: Video,
+      badge: "LIVE",
+      badgeColor: "bg-red-500/20 text-red-300",
+    },
+    {
+      id: "explore",
+      label: "Explore & Hashtags",
+      icon: Telescope,
+      badge: "#Trending",
+      badgeColor: "bg-indigo-500/20 text-indigo-300",
+    },
+    {
+      id: "stories",
+      label: "Stories",
+      icon: CircleDashed,
+      badge: "24h",
+      badgeColor: "bg-emerald-500/20 text-emerald-300",
+    },
+    {
       id: "radar",
       label: "Local Radar & Map",
       icon: Compass,
@@ -72,11 +109,30 @@ export function Sidebar({
       icon: Building2,
     },
     {
+      id: "events",
+      label: "Events & Meetups",
+      icon: Calendar,
+      badge: "2",
+      badgeColor: "bg-blue-500/20 text-blue-300",
+    },
+    {
       id: "messaging",
       label: "Direct Dispatches",
       icon: MessageSquare,
       badge: unreadCount > 0 ? String(unreadCount) : undefined,
       badgeColor: "bg-emerald-500 text-black font-bold",
+    },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: Bell,
+      badge: unreadCount > 0 ? String(unreadCount) : undefined,
+      badgeColor: "bg-red-500 text-white font-bold",
+    },
+    {
+      id: "bookmarks",
+      label: "Bookmarks & Saves",
+      icon: Bookmark,
     },
     {
       id: "jobs",

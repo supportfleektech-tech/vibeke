@@ -292,3 +292,157 @@ export const jobApplications = pgTable("job_applications", {
   index("job_applications_job_idx").on(t.jobId),
   index("job_applications_applicant_idx").on(t.applicantId),
 ]);
+
+// --- ALL-IN-ONE: TikTok Clips, Stories, Live, Hashtags, Notifications, Bookmarks, Events ---
+
+export const clips = pgTable("clips", {
+  id: serial("id").primaryKey(),
+  authorId: text("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  authorName: text("author_name").notNull(),
+  authorHandle: text("author_handle").notNull(),
+  authorAvatar: text("author_avatar").notNull(),
+  authorVerified: boolean("author_verified").default(true).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  videoUrl: text("video_url").notNull(),
+  thumbnailUrl: text("thumbnail_url").notNull(),
+  sound: text("sound").default("Original • Kinara").notNull(),
+  soundTitle: text("sound_title").default("Original sound").notNull(),
+  durationSec: integer("duration_sec").default(15).notNull(),
+  likes: integer("likes").default(0).notNull(),
+  commentsCount: integer("comments_count").default(0).notNull(),
+  sharesCount: integer("shares_count").default(0).notNull(),
+  bookmarksCount: integer("bookmarks_count").default(0).notNull(),
+  views: integer("views").default(0).notNull(),
+  hashtags: jsonb("hashtags").$type<string[]>().default([]).notNull(),
+  city: text("city").default("Nairobi").notNull(),
+  featured: boolean("featured").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("clips_author_idx").on(t.authorId),
+  index("clips_city_idx").on(t.city),
+  index("clips_featured_idx").on(t.featured),
+  index("clips_created_idx").on(t.createdAt),
+  index("clips_likes_idx").on(t.likes),
+]);
+
+export const clipLikes = pgTable("clip_likes", {
+  id: serial("id").primaryKey(),
+  clipId: integer("clip_id").notNull().references(() => clips.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("clip_likes_unique").on(t.clipId, t.userId),
+  index("clip_likes_clip_idx").on(t.clipId),
+]);
+
+export const clipComments = pgTable("clip_comments", {
+  id: serial("id").primaryKey(),
+  clipId: integer("clip_id").notNull().references(() => clips.id, { onDelete: "cascade" }),
+  authorId: text("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  authorName: text("author_name").notNull(),
+  authorAvatar: text("author_avatar").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("clip_comments_clip_idx").on(t.clipId),
+]);
+
+export const stories = pgTable("stories", {
+  id: serial("id").primaryKey(),
+  authorId: text("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  authorName: text("author_name").notNull(),
+  authorHandle: text("author_handle").notNull(),
+  authorAvatar: text("author_avatar").notNull(),
+  mediaUrl: text("media_url").notNull(),
+  mediaType: text("media_type").default("image").notNull(), // image | video
+  caption: text("caption").default("").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  viewedBy: jsonb("viewed_by").$type<string[]>().default([]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("stories_author_idx").on(t.authorId),
+  index("stories_expires_idx").on(t.expiresAt),
+]);
+
+export const lives = pgTable("lives", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  hostId: text("host_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  hostName: text("host_name").notNull(),
+  hostHandle: text("host_handle").notNull(),
+  hostAvatar: text("host_avatar").notNull(),
+  title: text("title").notNull(),
+  category: text("category").default("General").notNull(),
+  description: text("description").default("").notNull(),
+  thumbnail: text("thumbnail").notNull(),
+  status: text("status").default("live").notNull(), // live | ended
+  viewersCount: integer("viewers_count").default(0).notNull(),
+  likes: integer("likes").default(0).notNull(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+}, (t) => [
+  index("lives_host_idx").on(t.hostId),
+  index("lives_status_idx").on(t.status),
+  index("lives_started_idx").on(t.startedAt),
+]);
+
+export const hashtags = pgTable("hashtags", {
+  tag: text("tag").primaryKey(),
+  count: integer("count").default(0).notNull(),
+  trendingScore: integer("trending_score").default(0).notNull(),
+  category: text("category").default("general").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("hashtags_trending_idx").on(t.trendingScore),
+]);
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  actorId: text("actor_id").references(() => users.id),
+  actorName: text("actor_name").notNull(),
+  actorAvatar: text("actor_avatar").notNull(),
+  type: text("type").notNull(), // like | comment | follow | mention | escrow | live | clip | story | job | system
+  entityType: text("entity_type").default("post").notNull(), // post | clip | story | live | job | marketplace
+  entityId: text("entity_id").notNull(),
+  message: text("message").notNull(),
+  read: boolean("read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("notifications_user_idx").on(t.userId),
+  index("notifications_read_idx").on(t.read),
+  index("notifications_created_idx").on(t.createdAt),
+]);
+
+export const bookmarks = pgTable("bookmarks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  entityType: text("entity_type").notNull(), // post | clip | marketplace | job
+  entityId: text("entity_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("bookmarks_unique").on(t.userId, t.entityType, t.entityId),
+  index("bookmarks_user_idx").on(t.userId),
+  index("bookmarks_entity_idx").on(t.entityType, t.entityId),
+]);
+
+export const events = pgTable("events", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  banner: text("banner").notNull(),
+  location: text("location").notNull(),
+  city: text("city").notNull(),
+  category: text("category").default("Tech").notNull(),
+  startAt: timestamp("start_at").notNull(),
+  endAt: timestamp("end_at").notNull(),
+  organizerId: text("organizer_id").references(() => users.id),
+  attendeesCount: integer("attendees_count").default(0).notNull(),
+  maxAttendees: integer("max_attendees").default(100).notNull(),
+  price: integer("price").default(0).notNull(), // 0 = free
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("events_city_idx").on(t.city),
+  index("events_start_idx").on(t.startAt),
+  index("events_category_idx").on(t.category),
+]);
