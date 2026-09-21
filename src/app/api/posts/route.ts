@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { posts, users } from "@/db/schema";
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, sql, inArray } from "drizzle-orm";
 import { seedDatabase } from "@/db/seed";
+import { follows } from "@/db/schema";
+import { getCurrentUserId } from "@/lib/get-user";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
     const city = searchParams.get("city");
+    const feed = searchParams.get("feed") as "foryou" | "following" | null;
+    const sort = searchParams.get("sort") as "trending" | "recent" | "following" | null;
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
     const offset = parseInt(searchParams.get("offset") || "0");
     const cursor = searchParams.get("cursor");
@@ -21,10 +25,38 @@ export async function GET(request: Request) {
     if (city && city !== "all") conditions.push(eq(posts.city, city));
     if (cursor) conditions.push(sql`${posts.id} > ${parseInt(cursor)}`);
 
-    let query = db.select().from(posts).orderBy(desc(posts.pinned), desc(posts.createdAt)).limit(limit).offset(offset);
+    // Feed support: ?feed=foryou|following
+    if (feed === "following") {
+      const currentUserId = await getCurrentUserId();
+      if (!currentUserId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const followingRows = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(eq(follows.followerId, currentUserId));
+      const followingIds = followingRows.map((r) => r.followingId);
+      if (followingIds.length === 0) {
+        return NextResponse.json({ posts: [], nextCursor: null, limit, offset, count: 0 });
+      }
+      conditions.push(inArray(posts.authorId, followingIds));
+    }
+
+    // Determine ordering: foryou/trending vs recent/following feed
+    let orderBy: any[];
+    if (feed === "following" || sort === "recent" || sort === "following") {
+      orderBy = [desc(posts.pinned), desc(posts.createdAt)];
+    } else if (sort === "trending" || feed === "foryou") {
+      // trending: likes desc, shares desc, createdAt desc (or pinned first)
+      orderBy = [desc(posts.pinned), desc(posts.likes), desc(posts.sharesCount), desc(posts.createdAt)];
+    } else {
+      orderBy = [desc(posts.pinned), desc(posts.createdAt)];
+    }
+
+    let query = db.select().from(posts).orderBy(...orderBy).limit(limit).offset(offset);
     // drizzle where chaining
     if (conditions.length > 0) {
-      query = db.select().from(posts).where(conditions.length === 1 ? conditions[0] : and(...conditions)).orderBy(desc(posts.pinned), desc(posts.createdAt)).limit(limit).offset(offset) as any;
+      query = db.select().from(posts).where(conditions.length === 1 ? conditions[0] : and(...conditions)).orderBy(...orderBy).limit(limit).offset(offset) as any;
     }
 
     let result = await query;

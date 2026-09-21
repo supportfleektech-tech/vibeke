@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+// PWA — zero-budget setup:
+// next-pwa is NOT installed (see package.json). For zero-budget, we ship manual manifest.json + placeholder sw.js.
+// If next-pwa is added later (`pnpm add next-pwa`), replace this with:
+//   import withPWA from "next-pwa";
+//   const pwa = withPWA({ dest: "public", register: true, skipWaiting: true });
+//   export default pwa(nextConfig);
+// Current config works without next-pwa — manifest + sw.js are served statically from /public.
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [

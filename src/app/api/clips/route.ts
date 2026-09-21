@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { clips, hashtags, users } from "@/db/schema";
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, sql, inArray } from "drizzle-orm";
 import { seedDatabase } from "@/db/seed";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
+import { follows } from "@/db/schema";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
     const authorId = searchParams.get("authorId");
     const featuredParam = searchParams.get("featured");
     const sort = (searchParams.get("sort") || "trending") as "trending" | "recent" | "following";
+    const feed = searchParams.get("feed") as "foryou" | "following" | null;
 
     const limitRaw = searchParams.get("limit");
     const offsetRaw = searchParams.get("offset");
@@ -62,6 +64,30 @@ export async function GET(request: Request) {
       // jsonb containment: hashtags @> '["tag"]'::jsonb
       conditions.push(sql`${clips.hashtags} @> ${JSON.stringify([hashtag])}::jsonb`);
     }
+
+    // Feed support: ?feed=foryou|following
+    if (feed === "following") {
+      const currentUserId = await getCurrentUserId();
+      if (!currentUserId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const followingRows = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(eq(follows.followerId, currentUserId));
+      const followingIds = followingRows.map((r) => r.followingId);
+      if (followingIds.length === 0) {
+        return NextResponse.json({
+          clips: [],
+          nextCursor: null,
+          limit,
+          offset,
+          count: 0,
+        });
+      }
+      conditions.push(inArray(clips.authorId, followingIds));
+    }
+    // feed=foryou keeps trending sort (likes desc + views desc + createdAt desc) - handled via sort logic
 
     const whereClause = conditions.length === 0 ? undefined : conditions.length === 1 ? conditions[0] : and(...conditions);
 

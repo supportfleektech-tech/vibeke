@@ -9,6 +9,23 @@ export const metadata: Metadata = {
   description:
     "The first premium African-designed digital ecosystem. Blending Apple polish, Linear speed, Notion organization, Discord communities, and Google Maps local discovery with high-trust sovereign commerce.",
   keywords: ["Kinara", "African Tech", "Silicon Savannah", "Nairobi", "Lagos", "Kigali", "Sovereign Platform", "Modular Social"],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "KINARA",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
+};
+
+export const viewport = {
+  themeColor: "#059669",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

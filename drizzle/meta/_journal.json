@@ -15,6 +15,13 @@
       "when": 1789954580808,
       "tag": "0001_lean_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789957865682,
+      "tag": "0002_tearful_guardsmen",
+      "breakpoints": true
     }
   ]
 }

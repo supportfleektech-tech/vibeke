@@ -39,7 +39,7 @@ interface ClipsViewProps {
   initialClips?: ClipItem[];
 }
 
-export default function ClipsView({ clips: externalClips, initialClips }: ClipsViewProps) {
+export function ClipsView({ clips: externalClips, initialClips }: ClipsViewProps) {
   const shouldFetch = !externalClips && !initialClips;
   const swrKey = shouldFetch ? "/api/clips?limit=20&sort=trending" : null;
 
@@ -541,5 +541,6 @@ export default function ClipsView({ clips: externalClips, initialClips }: ClipsV
   );
 }
 
- // Named re-export for barrel imports
+  // Named re-export for barrel imports
 export type { ClipsViewProps };
+export default ClipsView;

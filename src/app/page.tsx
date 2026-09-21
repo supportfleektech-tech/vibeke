@@ -78,6 +78,12 @@ const BookmarksView = dynamic(() => import("@/components/bookmarks/BookmarksView
 const EventsView = dynamic(() => import("@/components/events/EventsView").then(m => m.EventsView), {
   loading: () => <SkeletonCard />,
 });
+const AdminView = dynamic(() => import("@/components/admin/AdminView").then(m => m.AdminView), {
+  loading: () => <SkeletonCard />,
+});
+const CoursesView = dynamic(() => import("@/components/courses/CoursesView").then(m => m.CoursesView), {
+  loading: () => <SkeletonCard />,
+});
 
 const DEFAULT_SECTIONS: DashboardSectionConfig[] = [
   { id: "greeting", label: "Personalized Greeting & Status", icon: "👋", visible: true },
@@ -626,6 +632,14 @@ export default function KinaraApp() {
 
           {currentView === "events" && (
             <EventsView />
+          )}
+
+          {currentView === "admin" && (
+            <AdminView />
+          )}
+
+          {currentView === "courses" && (
+            <CoursesView />
           )}
         </main>
       </div>

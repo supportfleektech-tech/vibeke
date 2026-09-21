@@ -24,7 +24,11 @@ import {
   Bookmark,
   Calendar,
   Telescope,
-  Zap
+  Zap,
+  GraduationCap,
+  FileText,
+  BarChart3,
+  Flag
 } from "lucide-react";
 import { PersonaRole } from "@/types";
 
@@ -145,6 +149,20 @@ export function Sidebar({
       icon: User,
       badge: "98 ★",
       badgeColor: "bg-amber-500/20 text-amber-300",
+    },
+    {
+      id: "courses",
+      label: "Courses & Studio",
+      icon: GraduationCap,
+      badge: "New",
+      badgeColor: "bg-indigo-500/20 text-indigo-300",
+    },
+    {
+      id: "admin",
+      label: "Trust Ops (Admin)",
+      icon: Shield,
+      badge: "Ops",
+      badgeColor: "bg-slate-500/20 text-slate-300",
     },
     {
       id: "ai",

@@ -446,3 +446,124 @@ export const events = pgTable("events", {
   index("events_start_idx").on(t.startAt),
   index("events_category_idx").on(t.category),
 ]);
+
+export const follows = pgTable("follows", {
+  id: serial("id").primaryKey(),
+  followerId: text("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  followingId: text("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("follows_unique").on(t.followerId, t.followingId),
+  index("follows_follower_idx").on(t.followerId),
+  index("follows_following_idx").on(t.followingId),
+]);
+
+export const hashtagFollows = pgTable("hashtag_follows", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tag: text("tag").notNull().references(() => hashtags.tag, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("hashtag_follows_unique").on(t.userId, t.tag),
+]);
+
+export const polls = pgTable("polls", {
+  id: serial("id").primaryKey(),
+  postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
+  clipId: integer("clip_id").references(() => clips.id, { onDelete: "cascade" }),
+  question: text("question").notNull(),
+  options: jsonb("options").$type<string[]>().notNull(),
+  votes: jsonb("votes").$type<number[]>().default([0,0,0,0]).notNull(),
+  votedBy: jsonb("voted_by").$type<string[]>().default([]).notNull(),
+  createdBy: text("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("polls_post_idx").on(t.postId),
+  index("polls_clip_idx").on(t.clipId),
+]);
+
+export const wikiPages = pgTable("wiki_pages", {
+  id: text("id").primaryKey(),
+  communityId: text("community_id").notNull().references(() => communities.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  version: integer("version").default(1).notNull(),
+  authorId: text("author_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("wiki_community_slug_unique").on(t.communityId, t.slug),
+  index("wiki_community_idx").on(t.communityId),
+]);
+
+export const courses = pgTable("courses", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  banner: text("banner").notNull(),
+  category: text("category").default("Tech").notNull(),
+  price: integer("price").default(0).notNull(),
+  lessons: jsonb("lessons").$type<{ title: string; duration: string; videoUrl: string }[]>().default([]).notNull(),
+  instructorId: text("instructor_id").references(() => users.id),
+  enrolledCount: integer("enrolled_count").default(0).notNull(),
+  rating: numeric("rating", { precision: 3, scale: 2 }).default("4.8").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("courses_category_idx").on(t.category),
+  index("courses_instructor_idx").on(t.instructorId),
+]);
+
+export const enrollments = pgTable("enrollments", {
+  id: serial("id").primaryKey(),
+  courseId: text("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  progress: integer("progress").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("enrollments_unique").on(t.courseId, t.userId),
+]);
+
+export const sounds = pgTable("sounds", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+  cover: text("cover").notNull(),
+  audioUrl: text("audio_url").notNull(),
+  durationSec: integer("duration_sec").default(15).notNull(),
+  usesCount: integer("uses_count").default(0).notNull(),
+  category: text("category").default("Afrobeats").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("sounds_category_idx").on(t.category),
+  index("sounds_uses_idx").on(t.usesCount),
+]);
+
+export const challenges = pgTable("challenges", {
+  id: text("id").primaryKey(),
+  tag: text("tag").notNull().references(() => hashtags.tag),
+  title: text("title").notNull(),
+  banner: text("banner").notNull(),
+  description: text("description").notNull(),
+  prize: text("prize").default("Featured on KINARA").notNull(),
+  endsAt: timestamp("ends_at").notNull(),
+  participantsCount: integer("participants_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("challenges_tag_idx").on(t.tag),
+  index("challenges_ends_idx").on(t.endsAt),
+]);
+
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  reporterId: text("reporter_id").notNull().references(() => users.id),
+  entityType: text("entity_type").notNull(), // post | clip | user | community | comment
+  entityId: text("entity_id").notNull(),
+  reason: text("reason").notNull(),
+  details: text("details").default("").notNull(),
+  status: text("status").default("pending").notNull(), // pending | reviewed | actioned | dismissed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("reports_status_idx").on(t.status),
+  index("reports_entity_idx").on(t.entityType, t.entityId),
+]);
