@@ -506,6 +506,24 @@ Existing suites: `src/lib/validators.test.ts`, `src/lib/ratelimit.test.ts`, `src
 | **[DEPLOYMENT.md](./DEPLOYMENT.md)** | Docker, Vercel, Neon/Supabase, drizzle migrate, health, CI |
 | **[SECURITY.md](./SECURITY.md)** | Auth, rate-limit, seed secret, Zod, headers, token rotation, escrow |
 | **[CONTRIBUTING.md](./CONTRIBUTING.md)** | Branching, conventional commits, PR checklist |
+| **[ROADMAP.md](./ROADMAP.md)** | What's next — Horizon 0 ship, Horizon 1 harden, Horizon 2 grow |
+| **[CHANGELOG.md](./CHANGELOG.md)** | Version history — v2.0.0 sovereign sweep (10 phases) + v1.0.0 |
+
+---
+
+## What's Next
+
+> After v2.0.0 sovereign sweep: **ship → harden → grow**. See **[ROADMAP.md](./ROADMAP.md)** for full Horizon plan with owner/effort.
+
+**Immediate (this week) — ship:**
+1. **Deploy** `DATABASE_URL` (Neon pooled) + `NEXTAUTH_SECRET` + `SEED_SECRET` → Vercel → verify `GET /api/health` `ok:true` + `seeded:true` — `DEPLOYMENT.md:4.1`
+2. **Domain + TLS** `kinara.africa` via Vercel
+3. **E2E Smoke** Playwright 5 specs (`pnpm test:e2e` — to be added) + **Sentry** DSN + **Vercel Analytics** — already deps: `@vercel/analytics`
+4. **Backup cron** `pg_dump` daily → `backups/`
+
+**Next:** Real Auth (`bcrypt` swap in `src/lib/auth.ts:28`), Daraja STK payments (`POST /api/webhooks/mpesa`), Uploads (Vercel Blob), Realtime (`socket.io`), `pg_trgm` Search v2, PWA offline — see `ROADMAP.md:1.x`.
+
+> **Build note:** `package.json` now uses `next build --webpack` + `next dev --webpack` (Turbopack blocked by `next-auth@beta` — `build:turbo` keeps `--turbopack` for when resolved). `pnpm dev` / `pnpm build` already handle the flag.
 
 ---
 

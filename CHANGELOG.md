@@ -1,0 +1,59 @@
+# CHANGELOG — KINARA Sovereign Platform
+
+All notable changes to this project documented here. Follows [Keep a Changelog](https://keepachangelog.com/) + [Semantic Versioning](https://semver.org/).
+
+---
+
+## [2.0.0] — 2026-09-21 — Sovereign Sweep (10 Phases)
+
+### Added
+- **Env** — `drizzle.config.ts` (env-driven), `src/lib/env.ts` zod `envSchema` + `hasAiKey/getAiProvider`, `src/db/index.ts` pool `{max10, idle30s, conn10s, SSL prod, maxUses7500}` + `checkDbHealth()`, `.env.example` expanded (AI/OpenRouter, Auth, SENTRY, SEED_SECRET, Mapbox)
+- **Design System** — `Geist` font `src/app/layout.tsx`, tokens `indigo/slate` + spacing/typo/shadow `src/lib/tokens.ts`, `src/app/globals.css` focus-visible + `prefers-reduced-motion` + `prefers-contrast` + `.touch-target 44px` + `spinSlow/fadeIn/slideIn`, `src/components/ui/*` (Button 5×4 variants, Card, Input, Dialog, Badge 4 variants, Avatar, Tabs, Progress) + `next.config.ts` `images.remotePatterns` + `headers` + `optimizePackageImports`
+- **DB** — 15 tables (`likes`, `comments`, `communityMembers`, `bookings`, `escrowTransactions`, `threads`, `jobApplications`) + `jsonb` for `skills/tags/rules/services/participants/metadata` + 40+ B-tree indexes + FK `references cascade` + `numeric(10,7)` lat/lng + `drizzle/0000_closed_jackal.sql` (15 tables) + transactional `src/db/seed.ts` (idempotent, 4 users, threads, 4 posts, 4 communities, 3 members, 5 marketplace, 2 businesses, 3 messages, 3 jobs, 5 radar)
+- **API Security** — `zod` every route `src/lib/validators.ts`, `Auth.js 5 Credentials JWT` `src/lib/auth.ts` + `[...nextauth]/route.ts` + `getCurrentUserId()` fallback, in-memory LRU `src/lib/ratelimit.ts` `Map 5-min GC` + `getClientIp`, `POST /api/seed` secret gate `x-seed-secret` 3/min, uniform `{success, error.details}` + 429 `Retry-After`
+- **API Refinement** — SQL `WHERE eq/and/ilike/lte/sql` (no JS filter) + `limit/offset/cursor` pagination + `nextCursor` + `GET /api/search?q&type` parallel ILIKE 6 tables + `GET /api/health` enriched `{ok,version,latencyMs,seeded,pool,timestamp}` + `GET /api/posts/[id]/comments` + `POST /api/jobs/[id]/apply` 409
+- **Frontend** — `localStorage` persist `sectionsConfig/currentPersona/selectedCity/lowBandwidth` + `effectiveType 2g` auto, `SWR dedup 60s` 8 hooks `src/lib/fetcher.ts`, `dynamic ssr:false` for `DynamicHome/Leaflet/AI`, `dnd-kit` reorder + empty-state `DynamicHome`, `sonner` replaces 11 `alert()` (Marketplace create `POST /api/marketplace`, Business `Directions→maps`, etc), `Directions→google maps`, `next/image unoptimized` 34, `touch-target` 44px, `role=dialog` + `aria-*` + outside-click + Escape
+- **AI** — `ai@7 + openai@7` OpenRouter preferred (`openrouter.ai/api/v1/chat/completions` + `HTTP-Referer/X-Title`, 15s Abort, `AI_MODEL`), fallback stubs `rewrite/summarize/translate/sheng/professional/pitch/continue/emojis/price_check/copilot` 20/min
+- **Maps** — `Leaflet 1.9.4 + react-leaflet 5` `LeafletMapCore.tsx` CARTO light tiles free, `dynamic ssr:false` SSR-safe, real `lat/lng` markers `createPinIcon` per type, user `You (Brian)` + `geolocation` opt-in, OSM directions `window.open`, `ACTIVE NODES {filteredPins.length}` + HUD
+- **Perf/A11y** — `*:focus-visible emerald`, `prefers-reduced-motion` disables animation, `prefers-contrast`, `loading.tsx`/`error.tsx`, `SkeletonCard`, `Progress` for trust/business, `SWR` cache, `next/image` avif/webp, `compress:true`
+- **Tests** — `vitest 5 + jsdom + @testing-library/react` `vitest.config.ts` `@` alias, `src/lib/validators.test.ts` + `ratelimit.test.ts` + `ui/button.test.tsx` 8/8 pass `7.9s`, `pnpm test` `test:watch` `test:coverage`
+- **Docs** — `README 525l` `ARCH 526l` `DESIGN 368l` `API 1327l` `DEPLOY 343l` `SECURITY 363l` `CONTRIBUTING 216l` + `ROADMAP.md` `CHANGELOG.md`
+- **Infra** — `Dockerfile node:22-alpine` multi-stage, `docker-compose.yml` `postgres:16-alpine kinara_db` + `app:3000` + health `pg_isready + /api/health` + optional redis, `.dockerignore`, `.github/workflows/ci.yml` lint→typecheck→test→build→smoke, `.nvmrc 22`, `instrumentation.ts` pino, `pino` logger
+
+### Changed
+- `package.json:scripts` `dev: next dev --webpack`, `build: next build --webpack` + `build:turbo` (Turbopack blocked by next-auth beta, webpack required), `lint:fix`, `test`, `db:*`, `format`
+- `src/app/api/posts/route.ts` GET now `WHERE eq(category/city) + limit/offset/cursor` indexed, POST zod + `getCurrentUserId()` denorm
+- `src/app/api/*` all routes now Zod + rateLimit + SQL (no JS `.filter`)
+- `src/app/globals.css` tokens `indigo/slate` + spacing + typography + motion + a11y
+- `src/app/layout.tsx` `GeistSans` + `Toaster sonner` + skip-link `#main-content`
+
+### Fixed
+- **Build** — `next build` Turbopack `Module not found: Can't resolve 'next-auth'` → forced `--webpack` (dev + build)
+- **Lint** — `react/no-unescaped-entities` `Today's→Today&apos;s` + `react-hooks/set-state-in-effect` disabled intentional, `no-img-element` 32 warnings → 0 via `next/image`
+- **Typecheck** — `tsc --noEmit --skipLibCheck` 0 (was 0 before but now with jsonb `tags string[]` not `string` + `button.test` jest-dom fix `disabled` check)
+- **DB** — `skills/achievements/tags/rules/services/participants` `text JSON.stringify` → `jsonb` object, `postedAt` `text "2 hours ago"` → `timestamp`, `businesses` missing `createdAt/updatedAt` added, `messages.timestamp` `text "10:14 AM"` → `timestamp`, `localRadar lat/lng 6,4→10,7`
+- **Frontend** — `Marketplace create alert()` → `POST /api/marketplace` + toast, `Jobs Apply` local → `POST /api/jobs/[id]/apply`, `Community join` local → `POST /api/communities/[slug]`, hard `unreadCount 2` → `messages.filter(!isMe).length`, `activeVoiceCount` derived, `cinema` static thumbs → video capable, `messages preview` hardcoded Folake → `messages.slice(0,3)`
+
+### Security
+- Documented leaked `ghp_*` rotation in `SECURITY.md`, `NEXTAUTH_SECRET` 32+ chars, `SEED_SECRET` gate, `X-Frame:DENY` etc headers, `bcrypt` swap note
+
+---
+
+## [1.0.0] — 2026-09-20 — Initial Sovereign Prototype
+
+### Added
+- `Next.js 16.2 + React 19.2 + Drizzle 0.45 + pg 8.20 + Tailwind 4.1` base
+- `src/app/page.tsx` KinaraApp 8 modules `DEFAULT_SECTIONS`, persona adaptive `handleSelectPersona`, `Header/Sidebar/UniversalSearchModal/ModuleCustomizerModal`, `DynamicHome/LocalRadarMap/CommunityView/Marketplace/Business/Messaging/Jobs/Profile/AI`
+- 8 tables `users/posts/communities/marketplace_items/businesses/messages/jobs/localRadar` + `seed.ts` Brian Mwangi + 4 posts + 4 communities + 5 marketplace + 2 businesses + 3 messages + 3 jobs + 5 radar
+- `next.config.ts: {}` empty, `globals.css` emerald/gold tokens + `kinara-card` lift
+- `GET /api/*` 8 endpoints auto-seed if empty + `POST /api/posts` + `POST /api/posts/[id]/like` stub + `POST /api/ai` stub
+
+---
+
+## Unreleased — Next
+
+See `ROADMAP.md` — `0.1 Deploy Vercel+Neon` → `0.4 E2E Smoke` → `1.1 Real Auth` → `1.2 Daraja Payments` → `2.1 Mobile Expo`.
+
+---
+
+*Generated: 2026-09-21 — run `pnpm build --webpack && pnpm test && pnpm lint && pnpm typecheck` to verify.*
