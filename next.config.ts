@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
+import withPWA from "next-pwa";
+import { withSentryConfig } from "@sentry/nextjs";
 
-// PWA — zero-budget setup:
-// next-pwa is NOT installed (see package.json). For zero-budget, we ship manual manifest.json + placeholder sw.js.
-// If next-pwa is added later (`pnpm add next-pwa`), replace this with:
-//   import withPWA from "next-pwa";
-//   const pwa = withPWA({ dest: "public", register: true, skipWaiting: true });
-//   export default pwa(nextConfig);
-// Current config works without next-pwa — manifest + sw.js are served statically from /public.
+const pwa = withPWA({
+  dest: "public",
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === "development",
+});
 
 const nextConfig: NextConfig = {
   images: {
@@ -36,4 +37,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(pwa(nextConfig), {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+});

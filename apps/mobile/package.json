@@ -1,0 +1,22 @@
+{
+  "name": "kinara-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-maps": "1.15.0",
+    "expo-image-picker": "~15.0.0",
+    "expo-av": "~14.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.0"
+  }
+}

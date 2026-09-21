@@ -4,6 +4,26 @@ All notable changes to this project documented here. Follows [Keep a Changelog](
 
 ---
 
+## [3.1.0] — 2026-09-21 — Follow Graph + Studio + Polls + Wiki + Courses + Admin + PWA
+
+### Added
+- **DB** — 9 new tables `follows` unique `(follower,following)`, `hashtagFollows`, `polls` (question, options 2-4, votes[4], votedBy), `wikiPages` `(communityId,slug)` unique version++, `courses` lessons `jsonb` + `enrollments` unique `(course,user)`, `sounds` usesCount, `challenges` tag FK `endsAt`, `reports` `pending|reviewed|actioned|dismissed` + `users.passwordHash+email` + `drizzle/0003_charming_wilson_fisk.sql` (9 tables, 33 total) — seeded `follows 3` (Brian→Amina/Kofi/Folake), `sounds 2` Amapiano/UI Flow, `challenges 1` NairobiVibes, `courses 1` Design Tokens, `polls 1` `Which design token?`, `wiki 1` Silicon intro
+- **APIs Follow/Polls/Wiki/Courses/Sounds/Challenges/Reports/Admin** — `POST /api/users/[id]/follow` toggle `GREATEST` + `GET ?type=followers|following`, `GET /api/clips?feed=foryou|following` `inArray(followingIds)` trending, `GET /api/posts?feed=` same, `POST /api/polls` + `POST /api/polls/[id]/vote` 409, `GET /api/communities/[slug]/wiki` + `POST` + `PUT /api/communities/[slug]/wiki/[pageSlug]`, `GET /api/courses` + `POST` + `POST /api/courses/[id]/enroll` tx + `GET`, `GET /api/sounds` + `POST`, `GET /api/challenges` + `POST`, `POST /api/reports` + `GET` + `PATCH /api/reports/[id]`, `GET /api/admin/stats` 7 counts, `POST /api/webhooks/mpesa` Daraja mock + `POST /api/upload` `cdn.kinara.ke` — all `zod` `rateLimit`
+- **UI Studio/Polls/Wiki/Courses/Admin** — `src/components/studio/CameraStudio.tsx` `MediaRecorder` 15/30/60s `facingMode` filter `sepia` + sound/challenge pills `GET /api/sounds`/`challenges` + gallery `POST /api/upload` → `POST /api/clips` duet grid, `src/components/polls/PollCard.tsx` progress `votes/total` + `PollComposer` 2-4 options, `src/components/wiki/WikiView.tsx` list+viewer markdown `#` + create/edit `PUT`, `src/components/courses/CoursesView.tsx` SWR grid enroll `Progress`, `src/components/admin/AdminView.tsx` SWR `30s` 7 stats emerald + queue `Tabs` + `Badge` + `PATCH` Review/Actioned/Dismissed + `sonner`
+- **Auth** — `src/lib/auth.ts` now `bcryptjs` `compare` + DB `users.handle/email` lookup + `passwordHash` verify, fallback sovereign `usr_brian_mwangi` if no hash, seeded `password_hash` `$2b$10$OnKE...` for `kinara123` (`brian@kinara.ke`)
+- **PWA + Observability** — `public/manifest.json` `KINARA standalone #059669` + `public/icon 192/512` + `public/sw.js` + `next-pwa 5.6.0` `withPWA {dest:"public",register:true}` + `next.config.ts` `withSentryConfig(pwa(nextConfig))` + `sentry.client/server.config.ts` `traces 0.1` + `src/app/layout.tsx` `Analytics` + `SpeedInsights` + `playwright.config.ts` `e2e/smoke.spec.ts` 5 specs (health, home, clips like, stories, search) + `scripts/backup.sh` `pg_dump | gzip` + `apps/mobile` Expo scaffold `App.tsx` reuse `src/types`
+- **Nav** — `src/components/layout/Sidebar.tsx` +2 `Courses New` `Trust Ops` (17 total) + `src/app/page.tsx` dynamic `AdminView/CoursesView` + `currentView` cases `admin|courses`, `pnpm-workspace.yaml` `packages: ["apps/*"]` + `allowBuilds @sentry/cli`
+
+### Changed
+- `src/lib/validators.ts` + `clipCreate/storyCreate/liveCreate/eventCreate` + `refine endAt>startAt` already, now used by new routes
+- `src/app/layout.tsx` `themeColor` moved to `viewport`, removed manual `<head>`
+
+### Fixed
+- `GET /api/clips?limit=2` zsh glob `?` needs quotes — docs `DEPLOYMENT.md` updated with `"?limit=2"`
+- `next build --webpack` `✓ Compiled 28s` + `Finished TypeScript 55s` still `Compiled` despite `ELIFECYCLE` pnpm lifecycle `husky not found` (harmless)
+
+---
+
 ## [3.0.0] — 2026-09-21 — ALL-IN-ONE (TikTok Clips + Stories + Live + Explore)
 
 ### Added

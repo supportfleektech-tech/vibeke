@@ -1,4 +1,7 @@
+packages:
+  - "apps/*"
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+  "@sentry/cli": true

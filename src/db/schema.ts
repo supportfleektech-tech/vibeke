@@ -19,6 +19,8 @@ export const users = pgTable("users", {
   skills: jsonb("skills").$type<string[]>().default([]).notNull(),
   achievements: jsonb("achievements").$type<{ title: string; desc: string; icon: string }[]>().default([]).notNull(),
   preferences: jsonb("preferences").$type<{ persona?: string; lowBandwidth?: boolean; sections?: any }>().default({}).notNull(),
+  passwordHash: text("password_hash"),
+  email: text("email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [

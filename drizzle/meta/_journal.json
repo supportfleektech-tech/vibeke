@@ -22,6 +22,13 @@
       "when": 1789957865682,
       "tag": "0002_tearful_guardsmen",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789960445167,
+      "tag": "0003_charming_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }
