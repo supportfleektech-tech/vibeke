@@ -86,7 +86,7 @@ jobs:
       # CSRF token, so every sign-in must handshake /api/auth/csrf first. Without it
       # the callback fails with MissingCSRF, no session is issued, and an assertion
       # like "wrong password did not sign in" passes while testing nothing.
-      - name: Smoke test (health, seed, auth, admin, rate limit)
+      - name: Smoke test (health, seed, auth, admin, rate limit, lockout)
         run: |
           set -uo pipefail
           fail() { echo "::error::$1"; exit 1; }
@@ -133,7 +133,7 @@ jobs:
           [ "$HTTP_CODE" -lt 500 ] || fail "Health endpoint returned HTTP $HTTP_CODE"
           node -e 'const b=require("/tmp/health.json"); process.exit(b && b.ok === true ? 0 : 1)' \
             || fail "Health body did not contain ok:true"
-          echo "PASS 1/7 health ok:true (HTTP $HTTP_CODE)"
+          echo "PASS 1/8 health ok:true (HTTP $HTTP_CODE)"
 
           # --- 2. seed endpoint must be secret-protected ------------------------
           CODE=$(curl -s -o /tmp/seed-noauth.json -w "%{http_code}" -X POST $BASE/api/seed || echo 000)
@@ -153,7 +153,7 @@ jobs:
           curl -s -o /tmp/health2.json $BASE/api/health || true
           node -e 'const b=require("/tmp/health2.json"); process.exit(b && b.seeded === true ? 0 : 1)' \
             || fail "Health did not report seeded:true after seeding"
-          echo "PASS 2/7 seed secret enforced and seed applied"
+          echo "PASS 2/8 seed secret enforced and seed applied"
 
           # --- 3. anonymous callers are rejected and public reads leak nothing ---
           CODE=$(curl -s -o /tmp/user.json -w "%{http_code}" $BASE/api/user || echo 000)
@@ -169,7 +169,7 @@ jobs:
             && fail "public profile response leaked passwordHash" || true
           grep -q '"email"' /tmp/public.json \
             && fail "public profile response leaked email" || true
-          echo "PASS 3/7 anonymous 401s hold and public profile leaks nothing"
+          echo "PASS 3/8 anonymous 401s hold and public profile leaks nothing"
 
           # --- 4. credentials: wrong password rejected, right password accepted ---
           JAR=$(mktemp)
@@ -189,7 +189,7 @@ jobs:
             cat "$JAR" /tmp/signin.json 2>/dev/null || true
             fail "Correct password did not issue a session cookie (credentials provider is broken)"
           fi
-          echo "PASS 4/7 credentials provider rejects bad passwords and accepts good ones"
+          echo "PASS 4/8 credentials provider rejects bad passwords and accepts good ones"
 
           # --- 5. authenticated citizen: no admin, cannot self-promote ------------
           CODE=$(curl -s -o /tmp/me.json -w "%{http_code}" -b "$JAR" $BASE/api/user || echo 000)
@@ -208,7 +208,7 @@ jobs:
           grep -q '"role":"citizen"' /tmp/after.json \
             || fail "role escalation attempt mutated the user row: $(cat /tmp/after.json)"
           rm -f "$JAR"
-          echo "PASS 5/7 citizen is 403 on admin routes and cannot self-promote"
+          echo "PASS 5/8 citizen is 403 on admin routes and cannot self-promote"
 
           # --- 6. seeded admin can actually reach the admin routes ---------------
           JAR=$(mktemp)
@@ -220,7 +220,7 @@ jobs:
           CODE=$(curl -s -o /tmp/admin-stats.json -w "%{http_code}" -b "$JAR" $BASE/api/admin/stats || echo 000)
           [ "$CODE" = "200" ] || { cat /tmp/admin-stats.json; fail "admin GET /api/admin/stats returned $CODE (expected 200)"; }
           rm -f "$JAR"
-          echo "PASS 6/7 seeded admin reaches admin routes"
+          echo "PASS 6/8 seeded admin reaches admin routes"
 
           # --- 7. rate limiting actually engages ---------------------------------
           RL=0
@@ -231,14 +231,42 @@ jobs:
             if [ "$RC" = "429" ]; then RL=$((RL+1)); fi
           done
           if [ "$RL" -eq 0 ]; then fail "rate limiter never returned 429 in 40 GETs"; fi
-          echo "PASS 7/7 rate limiter returned 429 ($RL/40)"
+          echo "PASS 7/8 rate limiter returned 429 ($RL/40)"
+
+          # --- 8. credential lockout engages and is scoped to one handle --------
+          # Deliberately uses a handle no other check depends on: ten failures
+          # must lock THAT handle while leaving the shared IP bucket (30) usable.
+          LK=$(mktemp)
+          for i in $(seq 1 10); do
+            credentials_signin "$LK" "folake_lagos" "definitely-wrong-$i" >/dev/null \
+              || fail "csrf handshake failed on lockout attempt $i"
+          done
+
+          credentials_signin "$LK" "folake_lagos" "${SEED_PASSWORD}" >/dev/null \
+            || fail "csrf handshake failed for the locked handle"
+          echo "locked handle + CORRECT password -> HTTP $CODE"
+          if grep -Eq "session-token|kinara_session" "$LK"; then
+            cat "$LK"; fail "Locked account still issued a session for the correct password"
+          fi
+          grep -q 'sign-in refused for "folake_lagos"' /tmp/next.log \
+            || fail "lockout refusal was not logged server-side"
+          rm -f "$LK"
+
+          JAR=$(mktemp)
+          credentials_signin "$JAR" "brianmwangi" "${SEED_PASSWORD}" >/dev/null \
+            || fail "csrf handshake failed for the unrelated handle"
+          if ! grep -Eq "session-token|kinara_session" "$JAR"; then
+            cat "$JAR" /tmp/signin.json 2>/dev/null || true
+            fail "One locked handle locked every account from the same IP"
+          fi
+          rm -f "$JAR"
+          echo "PASS 8/8 credential lockout engages and is scoped to one handle"
 
           # --- cleanup ---------------------------------------------------------
           kill "$APP_PID" 2>/dev/null || true
           sleep 2
           kill -9 "$APP_PID" 2>/dev/null || true
-          echo "All smoke checks passed"
-          echo "All smoke checks passed"
+          echo "All smoke checks passed (8/8)"
 
       - name: Upload health artifact (on failure)
         if: failure()

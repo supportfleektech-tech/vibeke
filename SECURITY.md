@@ -222,9 +222,11 @@ through `runLoginAttempt(handle, ip, verify)`:
 
 **Verified**: `src/lib/login-throttle.test.ts` covers both buckets, the
 enumeration-oracle property, that the verifier is skipped once locked, and that a
-valid password still fails while locked. The runtime suite in `/tmp/opencode/verify.sh`
-locks a seeded account end to end and asserts that unrelated accounts from the same
-IP still sign in.
+valid password still fails while locked — it runs in CI with the rest of `pnpm test`.
+CI check **8/8** then locks a seeded account end to end over HTTP and asserts all three
+properties that matter: the *correct* password is refused after lockout, the refusal is
+written to the server log, and an unrelated handle signing in from the same IP still
+gets a session (so one locked account cannot lock everyone behind that IP).
 
 ---
 

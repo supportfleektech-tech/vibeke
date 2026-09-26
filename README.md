@@ -526,8 +526,10 @@ the workflow's smoke checks already cover the same HTTP contracts server-side.
 counter — otherwise enough reruns would lock the seeded account.
 
 CI (`.github/workflows/ci.yml`) runs **lint → typecheck → migrate → unit tests → build →
-7-check smoke** (health, seed auth, anonymous 401s, credential sign-in, admin/citizen
-authorization, privilege-escalation rejection, rate limit) on every push/PR.
+8-check smoke** (health, seed auth, anonymous 401s, credential sign-in, admin/citizen
+authorization, privilege-escalation rejection, rate limit, credential lockout) on every
+push/PR. The lockout check fails the build if a locked handle ever issues a session for
+the *correct* password, or if one locked handle locks out every account on that IP.
 
 Existing suites: `src/lib/validators.test.ts`, `src/lib/ratelimit.test.ts`,
 `src/lib/login-throttle.test.ts`, `src/components/ui/button.test.tsx`, plus
