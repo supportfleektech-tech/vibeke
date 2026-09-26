@@ -4,7 +4,7 @@ import { jobs } from "@/db/schema";
 import { eq, ilike, and, or, desc } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ const querySchema = z.object({
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`jobs:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`jobs:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     // Seed check if table empty
     const check = await db.select().from(jobs).limit(1);
     if (check.length === 0) {
-      await seedDatabase();
+      await ensureSeeded();
     }
 
     const conditions: any[] = [];

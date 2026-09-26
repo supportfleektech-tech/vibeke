@@ -20,7 +20,7 @@ export async function POST(
     const { getCurrentUserId } = await import("@/lib/get-user");
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`stories:view:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`stories:view:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },

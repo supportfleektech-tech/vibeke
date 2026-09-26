@@ -23,7 +23,7 @@ export async function POST(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`jobs:apply:${ip}`, 5, 60_000);
+    const rl = await rateLimit(`jobs:apply:${ip}`, 5, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon. (5/min)" },
@@ -119,7 +119,7 @@ export async function GET(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`jobs:apply:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`jobs:apply:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },

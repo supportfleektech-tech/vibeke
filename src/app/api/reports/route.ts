@@ -5,6 +5,7 @@ import { desc, eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
+import { requireAdmin } from "@/lib/require-admin";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ const querySchema = z.object({
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`reports:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`reports:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 reports per minute." },
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`reports:list:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`reports:list:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 requests per minute." },
@@ -133,10 +134,9 @@ export async function GET(request: Request) {
     const { limit, offset } = paginationParsed.data;
     const validatedStatus = status;
 
-    // For demo: no auth check, but ideally verify admin role
-    // const userId = await getCurrentUserId();
-    // const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    // if (user?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // Moderation queue: admin/moderator only.
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
 
     const conditions: any[] = [];
     if (validatedStatus) conditions.push(eq(reports.status, validatedStatus));

@@ -1,34 +1,45 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Kinara Sovereign Smoke", () => {
+/**
+ * Public (anonymous) surface.
+ *
+ * Authenticated coverage lives in `auth.spec.ts`. Every assertion here is one the
+ * old suite used to swallow with `.catch(() => {})` or accept a silent no-op.
+ */
+test.describe("Kinara Sovereign Smoke (anonymous)", () => {
   test("health check", async ({ request }) => {
     const res = await request.get("/api/health");
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
     expect(data.ok).toBe(true);
     expect(data.version).toBe("3.4.0");
+    expect(data.seeded).toBe(true);
   });
 
-  test("home loads and shows Clips peek", async ({ page }) => {
+  test("home sends an anonymous visitor to the sign-in screen", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("KINARA — The Sovereign African Digital Platform")).toBeHidden(); // metadata, not visible
-    await expect(page.getByText("Synchronizing Sovereign Core")).toBeVisible({ timeout: 10000 }).catch(() => {});
-    // After hydration, DynamicHome + Clips peek should appear
-    await page.waitForTimeout(3000);
-    await expect(page.getByText("Kinara Clips — Trending").first()).toBeVisible({ timeout: 10000 }).catch(async () => {
-      // fallback: check Clips nav exists
-      await expect(page.getByRole("button", { name: /Clips/i }).first()).toBeVisible();
-    });
+    // GET /api/user answers 401 without a session, and the shell replaces itself
+    // with /signin rather than rendering with a null user.
+    await expect(page).toHaveURL(/\/signin/, { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("Clips feed Like", async ({ request }) => {
+  test("Clips feed is publicly readable", async ({ request }) => {
     const res = await request.get("/api/clips?limit=2");
     expect(res.ok()).toBeTruthy();
     const { clips } = await res.json();
     expect(clips.length).toBeGreaterThan(0);
-    const firstId = clips[0].id;
-    const like = await request.post(`/api/clips/${firstId}/like`);
-    expect([200, 429].includes(like.status())).toBeTruthy();
+  });
+
+  test("liking a clip without a session is rejected", async ({ request }) => {
+    const list = await request.get("/api/clips?limit=2");
+    const { clips } = await list.json();
+    expect(clips.length).toBeGreaterThan(0);
+
+    const like = await request.post(`/api/clips/${clips[0].id}/like`);
+    // Not 200/429: an anonymous mutation must never succeed.
+    expect(like.status()).toBe(401);
   });
 
   test("Stories 24h", async ({ request }) => {
@@ -43,5 +54,13 @@ test.describe("Kinara Sovereign Smoke", () => {
     expect(res.ok()).toBeTruthy();
     const { results } = await res.json();
     expect(results).toBeTruthy();
+  });
+
+  test("public profile hides email and password hash", async ({ request }) => {
+    const res = await request.get("/api/user?id=usr_kinara_admin");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.text();
+    expect(body).not.toContain("passwordHash");
+    expect(body).not.toContain("password_hash");
   });
 });

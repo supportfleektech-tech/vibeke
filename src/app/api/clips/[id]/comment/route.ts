@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`clip-comments:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`clip-comments:${ip}`, 20, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 20 comments per minute." },

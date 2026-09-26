@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users, posts, clips, reports, escrowTransactions, lives, events } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
+import { requireAdmin } from "@/lib/require-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`admin:stats:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`admin:stats:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 requests per minute." },
@@ -26,10 +27,9 @@ export async function GET(request: Request) {
       );
     }
 
-    // No auth for demo, but ideally check admin role
-    // const userId = await getCurrentUserId();
-    // const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    // if (user?.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // Admin-only: platform-wide counters are not public data.
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
 
     // Count queries via db.select - use sql count for efficiency, fallback to array length
     // Using drizzle count via sql

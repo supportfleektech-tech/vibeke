@@ -92,7 +92,7 @@ export async function POST(
 
     // Rate limit: 10/min per IP
     const ip = getClientIp(request);
-    const rl = rateLimit(`like:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`like:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 likes per minute." },

@@ -4,6 +4,7 @@ import { communities, marketplaceItems, businesses, jobs, posts, users } from "@
 import { sql, desc } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
+import { publicUserColumns } from "@/lib/user-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
 
     // Rate limit: 30/min per IP (search is heavier)
     const ip = getClientIp(request);
-    const rl = rateLimit(`search:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`search:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 searches per minute." },
@@ -174,7 +175,7 @@ export async function GET(request: Request) {
         (async () => {
           try {
             const rows = await db
-              .select()
+              .select(publicUserColumns)
               .from(users)
               .where(sql`${users.name} ILIKE ${pattern} OR ${users.handle} ILIKE ${pattern}`)
               .limit(limitPerType);

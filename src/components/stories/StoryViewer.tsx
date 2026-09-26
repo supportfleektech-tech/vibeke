@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { X } from "lucide-react";
 import { motion } from "motion/react";
@@ -39,64 +39,90 @@ export function StoryViewer({ stories, initialIndex, onClose, currentUserId }: S
 
   const currentStory = stories[currentIndex];
 
-  // Focus trap: focus close button on mount, restore overflow, Escape handling
+  // Navigation handlers are declared before the effects that reference them so the
+  // keydown listener never closes over an uninitialized binding. They are plain
+  // functions (no manual useCallback) because the React Compiler memoizes them; the
+  // hand-written wrappers were flagged as unpreservable by the compiler.
+  function handleNext() {
+    if (currentIndex >= stories.length - 1) {
+      onClose();
+      return;
+    }
+    setProgress(0);
+    setCurrentIndex((i) => i + 1);
+  }
+
+  function handlePrev() {
+    setProgress(0);
+    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
+  }
+
+  // Focus trap: focus close button and lock body scroll on mount, restore on unmount.
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeBtnRef.current?.focus();
-
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") handlePrev();
-      if (e.key === "ArrowRight") handleNext();
-    }
-    document.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = prevOverflow;
-      document.removeEventListener("keydown", handleKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose]);
+  }, []);
 
-  // Reset progress when story changes
+  // Keyboard: Escape closes, arrows navigate. Reads `currentIndex` directly and lists
+  // every value it closes over, so the listener is only re-bound when one of them
+  // actually changes (rather than on every render via unstable handler identities).
   useEffect(() => {
-    setProgress(0);
-  }, [currentIndex]);
-
-  // Auto-advance: 5s per story. increment 0.6% per 30ms => ~5s, throttled when paused.
-  // Spec describes 0.5% per 15ms (~3s) but we normalize to 5s premium timing using 30ms interval.
-  useEffect(() => {
-    if (isPaused) return;
-    if (!currentStory) return;
-
-    const interval = window.setInterval(() => {
-      setProgress((prev) => {
-        const next = prev + 1; // 1% per 50ms => 5s total; tuned to match requested feel
-        if (next >= 100) {
-          // advance
-          if (currentIndex < stories.length - 1) {
-            setCurrentIndex((i) => i + 1);
-          } else {
-            onClose();
-          }
-          return 0;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        if (currentIndex >= stories.length - 1) {
+          onClose();
+        } else {
+          setProgress(0);
+          setCurrentIndex((i) => i + 1);
         }
-        return next;
-      });
-    }, 50);
+      } else if (e.key === "ArrowLeft") {
+        setProgress(0);
+        if (currentIndex > 0) setCurrentIndex((i) => i - 1);
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose, currentIndex, stories.length]);
 
+  // Auto-advance: 1% per 50ms => ~5s per story, paused while `isPaused`.
+  // The advance side effect runs in the timer callback — never inside the
+  // setProgress updater, which React may invoke more than once (StrictMode).
+  useEffect(() => {
+    if (isPaused || !currentStory) return;
+    let pct = 0;
+    const interval = window.setInterval(() => {
+      pct += 1;
+      if (pct >= 100) {
+        pct = 0;
+        setProgress(0);
+        if (currentIndex < stories.length - 1) {
+          setCurrentIndex((i) => i + 1);
+        } else {
+          onClose();
+        }
+        return;
+      }
+      setProgress(pct);
+    }, 50);
     return () => window.clearInterval(interval);
   }, [isPaused, currentIndex, stories.length, onClose, currentStory]);
 
-  // Mark viewed after 2s
+  // Mark viewed after 2s of dwell time. "Already viewed" is derived from props instead
+  // of being written into state synchronously inside the effect body.
   useEffect(() => {
     if (!currentStory) return;
-    if (viewedSet.has(currentStory.id)) return;
-    const viewedBy = (currentStory.viewedBy as string[]) ?? [];
-    if (viewedBy.includes(currentUserId)) {
-      setViewedSet((s) => new Set(s).add(currentStory.id));
-      return;
-    }
+    const alreadyViewed =
+      viewedSet.has(currentStory.id) ||
+      ((currentStory.viewedBy as string[]) ?? []).includes(currentUserId);
+    if (alreadyViewed) return;
 
     const timer = window.setTimeout(async () => {
       try {
@@ -114,25 +140,6 @@ export function StoryViewer({ stories, initialIndex, onClose, currentUserId }: S
 
     return () => window.clearTimeout(timer);
   }, [currentStory, currentUserId, viewedSet]);
-
-  const handleNext = useCallback(() => {
-    if (currentIndex < stories.length - 1) {
-      setCurrentIndex((i) => i + 1);
-      setProgress(0);
-    } else {
-      onClose();
-    }
-  }, [currentIndex, stories.length, onClose]);
-
-  const handlePrev = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex((i) => i - 1);
-      setProgress(0);
-    } else {
-      // at first story, restart progress
-      setProgress(0);
-    }
-  }, [currentIndex]);
 
   // Touch swipe
   function onTouchStart(e: React.TouchEvent) {
@@ -176,7 +183,6 @@ export function StoryViewer({ stories, initialIndex, onClose, currentUserId }: S
       {/* Media layer */}
       <div className="absolute inset-0 bg-black">
         {currentStory.mediaType === "video" ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
           <video
             key={currentStory.id}
             src={currentStory.mediaUrl}
@@ -188,8 +194,10 @@ export function StoryViewer({ stories, initialIndex, onClose, currentUserId }: S
             className="w-full h-full object-contain bg-black"
           />
         ) : (
-          // use plain img for object-contain full-screen to avoid next/image constraint on unknown dims
-          // but keep next/image alternative for optimization where possible; use unoptimized for external
+          // Full-bleed story media served from arbitrary external CDNs with unknown
+          // intrinsic dimensions, so next/image cannot pre-size it. Scoped disable
+          // for this single element rather than a global rule opt-out.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             key={currentStory.id}
             src={currentStory.mediaUrl}

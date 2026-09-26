@@ -1,29 +1,45 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { seedDatabase } from "@/db/seed";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
-import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
+/** Constant-time comparison so the secret cannot be recovered by timing the response. */
+function secretsMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
 function checkSeedSecret(request: Request): NextResponse | null {
   const seedSecret = process.env.SEED_SECRET;
-  if (seedSecret) {
-    const provided = request.headers.get("x-seed-secret");
-    if (!provided || provided !== seedSecret) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: invalid or missing x-seed-secret" },
-        { status: 401 }
-      );
-    }
+
+  // Fail closed. An unset SEED_SECRET used to mean "no check at all", which made a
+  // destructive, admin-equivalent operation reachable by anyone.
+  if (!seedSecret) {
+    return NextResponse.json(
+      { success: false, error: "Seeding is disabled: SEED_SECRET is not configured." },
+      { status: 503 }
+    );
+  }
+
+  const provided = request.headers.get("x-seed-secret");
+  if (!provided || !secretsMatch(provided, seedSecret)) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized: invalid or missing x-seed-secret" },
+      { status: 401 }
+    );
   }
   return null;
 }
 
 async function handleSeed(request: Request, isDeprecatedGet = false) {
   const ip = getClientIp(request);
-  const rl = rateLimit(`seed:${ip}`, 3, 60_000);
+  const rl = await rateLimit(`seed:${ip}`, 3, 60_000);
   if (!rl.success) {
     return NextResponse.json(
       { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -34,11 +50,12 @@ async function handleSeed(request: Request, isDeprecatedGet = false) {
     );
   }
 
+  // The deprecated GET used to skip authorization entirely.
+  const authError = checkSeedSecret(request);
+  if (authError) return authError;
+
   if (isDeprecatedGet) {
     console.warn("[DEPRECATED] GET /api/seed is deprecated. Use POST /api/seed with x-seed-secret header.");
-  } else {
-    const authError = checkSeedSecret(request);
-    if (authError) return authError;
   }
 
   // db transaction check - only seed if not already seeded (idempotent, avoids thundering herd)

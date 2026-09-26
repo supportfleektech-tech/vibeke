@@ -2,50 +2,21 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { seedDatabase } from "@/db/seed";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { userPatchSchema } from "@/lib/validators";
 import { getCurrentUserId } from "@/lib/get-user";
-import { z } from "zod"; // zod import for validation compliance
+import { publicUserColumns, privateUserColumns } from "@/lib/user-columns";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * GET /api/user        -> the signed-in user's own profile (401 when anonymous)
+ * GET /api/user?id=... -> that user's public profile (never includes email/hash)
+ */
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const idParam = searchParams.get("id");
-    const userId = idParam || (await getCurrentUserId()) || "usr_brian_mwangi";
-
-    let userList = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-
-    if (userList.length === 0) {
-      // No auto-seed thundering herd: check if ANY users exist first before seeding
-      const anyUsers = await db.select().from(users).limit(1);
-      if (anyUsers.length === 0) {
-        await seedDatabase();
-        userList = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-        // Fallback to sovereign user if requested id still not found after seed
-        if (userList.length === 0 && userId !== "usr_brian_mwangi") {
-          userList = await db.select().from(users).where(eq(users.id, "usr_brian_mwangi")).limit(1);
-        }
-      }
-    }
-
-    if (userList.length === 0) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, data: userList[0], user: userList[0] });
-  } catch (err) {
-    console.error("GET /api/user error:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch user" }, { status: 500 });
-  }
-}
-
-export async function PATCH(request: Request) {
-  try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`user:patch:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`user:get:${ip}`, 60, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -56,7 +27,51 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const { searchParams } = new URL(request.url);
+    const idParam = searchParams.get("id");
+
+    let columns: typeof publicUserColumns | typeof privateUserColumns = publicUserColumns;
+    let userId: string | null = idParam;
+
+    if (!idParam) {
+      userId = await getCurrentUserId();
+      if (!userId) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      }
+      columns = privateUserColumns;
+    }
+
+    const rows = await db.select(columns).from(users).where(eq(users.id, userId!)).limit(1);
+
+    if (rows.length === 0) {
+      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: rows[0], user: rows[0] });
+  } catch (err) {
+    console.error("GET /api/user error:", err);
+    return NextResponse.json({ success: false, error: "Failed to fetch user" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const ip = getClientIp(request);
+    const rl = await rateLimit(`user:patch:${ip}`, 20, 60_000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit exceeded. Try again soon." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((rl.reset - Date.now()) / 1000)) },
+        }
+      );
+    }
+
+    const body = await request.json().catch(() => null);
+    if (body === null) {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+    }
 
     const parsed = userPatchSchema.safeParse(body);
     if (!parsed.success) {
@@ -66,11 +81,10 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { bio, role, location, name } = parsed.data;
+    const { bio, location, name } = parsed.data;
 
     const updates: Partial<typeof users.$inferInsert> = {};
     if (bio !== undefined) updates.bio = bio;
-    if (role !== undefined) updates.role = role;
     if (location !== undefined) updates.location = location;
     if (name !== undefined) updates.name = name;
 
@@ -79,12 +93,15 @@ export async function PATCH(request: Request) {
     }
 
     const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
 
     const updated = await db
       .update(users)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(users.id, userId))
-      .returning();
+      .returning(privateUserColumns);
 
     if (!updated[0]) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });

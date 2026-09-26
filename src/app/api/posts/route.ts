@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { posts, users } from "@/db/schema";
 import { desc, eq, and, sql, inArray } from "drizzle-orm";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 import { follows } from "@/db/schema";
 import { getCurrentUserId } from "@/lib/get-user";
 
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     if (result.length === 0) {
       const check = await db.select().from(posts).limit(1);
       if (check.length === 0) {
-        await seedDatabase();
+        await ensureSeeded();
         result = await db.select().from(posts).orderBy(desc(posts.pinned), desc(posts.createdAt)).limit(limit).offset(offset);
         if (conditions.length > 0) {
           result = await (db.select().from(posts).where(conditions.length === 1 ? conditions[0] : and(...conditions)).orderBy(desc(posts.pinned), desc(posts.createdAt)).limit(limit).offset(offset) as any);
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     const { getCurrentUserId } = await import("@/lib/get-user");
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`posts:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`posts:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json({ error: "Rate limit exceeded. Try again soon." }, { status: 429, headers: { "Retry-After": String(Math.ceil((rl.reset - Date.now()) / 1000)) } });
     }
@@ -101,6 +101,9 @@ export async function POST(request: Request) {
     const { content, category, city, mediaUrl, mediaType, tags, pinned } = parsed.data;
 
     const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const currentUser = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const author = currentUser[0] || {
       id: userId,

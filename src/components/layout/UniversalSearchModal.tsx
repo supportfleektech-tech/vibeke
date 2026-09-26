@@ -99,8 +99,12 @@ export function UniversalSearchModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "copilot", text: query }),
       });
-      const data = await res.json();
-      setAiAnswer(data.result || "No AI synthesis returned.");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setAiAnswer(data?.error || "Kinara AI Copilot is unavailable right now.");
+        return;
+      }
+      setAiAnswer(data?.result || "No AI synthesis returned.");
     } catch {
       setAiAnswer("Unable to reach Kinara AI Copilot at this moment.");
     } finally {

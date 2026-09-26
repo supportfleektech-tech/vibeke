@@ -5,7 +5,7 @@ import { asc, eq, and, or, ilike, desc } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ function slugify(title: string): string {
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`events:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`events:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -105,7 +105,7 @@ export async function GET(request: Request) {
     try {
       const check = await db.select().from(events).limit(1);
       if (check.length === 0) {
-        await seedDatabase();
+        await ensureSeeded();
       }
     } catch (e) {
       // Ignore seed errors, proceed with query
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`events:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`events:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 events per minute." },

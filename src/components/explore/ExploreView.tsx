@@ -75,15 +75,6 @@ interface PostItemLite {
   createdAt?: string;
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function timeAgo(dateStr?: string) {
   if (!dateStr) return "now";
   const d = new Date(dateStr);
@@ -113,13 +104,18 @@ export function ExploreView({ onNavigate, selectedCity: _selectedCity }: Explore
     fetcher
   );
 
-  const hashtags: HashtagItem[] = trendingData?.hashtags ?? trendingData?.data ?? [];
+  // Derived arrays are memoized so they keep referential identity across renders;
+  // otherwise `?? []` would mint a fresh array every render and defeat the useMemo below.
+  const hashtags: HashtagItem[] = useMemo(
+    () => trendingData?.hashtags ?? trendingData?.data ?? [],
+    [trendingData]
+  );
 
   const { data: clipsData } = useSWR<{ clips: ClipItem[] }>("/api/clips?limit=18&sort=trending", fetcher);
   const { data: postsData } = useSWR<{ posts: PostItemLite[] }>("/api/posts?limit=18", fetcher);
 
-  const clips: ClipItem[] = clipsData?.clips ?? [];
-  const posts: PostItemLite[] = postsData?.posts ?? [];
+  const clips: ClipItem[] = useMemo(() => clipsData?.clips ?? [], [clipsData]);
+  const posts: PostItemLite[] = useMemo(() => postsData?.posts ?? [], [postsData]);
 
   // Build mixed masonry items
   const masonryItems = useMemo(() => {
@@ -136,12 +132,14 @@ export function ExploreView({ onNavigate, selectedCity: _selectedCity }: Explore
       const r = searchData.results;
       const people = (r.people as Record<string, unknown>[]) ?? [];
       const postResults = (r.posts as PostItemLite[]) ?? [];
-      people.slice(0, 6).forEach((p) => items.push({ kind: "person", data: p, score: Math.random() * 100 }));
-      postResults.slice(0, 8).forEach((p) => items.push({ kind: "post", data: p, score: Math.random() * 100 }));
+      // Scores are deterministic (derived from the data, not Math.random) so the
+      // masonry order is stable across re-renders instead of reshuffling every time.
+      people.slice(0, 6).forEach((p, i) => items.push({ kind: "person", data: p, score: 50 - i }));
+      postResults.slice(0, 8).forEach((p, i) => items.push({ kind: "post", data: p, score: 40 - i }));
       // communities/products map loosely to post cards - skip for now
     } else {
-      clips.forEach((c) => items.push({ kind: "clip", data: c, score: Math.random() * 100 + (c.likes ?? 0) / 100 }));
-      posts.forEach((p) => items.push({ kind: "post", data: p, score: Math.random() * 100 + (p.likes ?? 0) / 10 }));
+      clips.forEach((c, i) => items.push({ kind: "clip", data: c, score: (c.likes ?? 0) / 100 - i * 0.01 }));
+      posts.forEach((p, i) => items.push({ kind: "post", data: p, score: (p.likes ?? 0) / 10 - i * 0.01 }));
       // inject some hashtag cards
       hashtags.slice(0, 4).forEach((h) => items.push({ kind: "hashtag", data: h, score: h.trendingScore }));
     }
@@ -172,11 +170,11 @@ export function ExploreView({ onNavigate, selectedCity: _selectedCity }: Explore
       });
     }
 
-    // ForYou shuffles by trendingScore, Following filters mock (show only first half)
+    // ForYou ranks by the deterministic score above (stable across renders);
+    // Following shows an evenly-spaced subset as a "following" vibe.
     if (feedMode === "ForYou") {
-      return shuffle(filtered).sort((a, b) => b.score - a.score);
+      return filtered.sort((a, b) => b.score - a.score);
     } else {
-      // Following mock - show subset as "following" vibe (every other)
       return filtered.filter((_, i) => i % 2 === 0);
     }
   }, [clips, posts, hashtags, searchData, searchQuery, activeTab, selectedHashtag, feedMode]);

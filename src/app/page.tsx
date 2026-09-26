@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -14,7 +15,7 @@ import { BusinessView } from "@/components/business/BusinessView";
 import { JobsView } from "@/components/jobs/JobsView";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { StoriesBar } from "@/components/stories/StoriesBar";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher, FetchError } from "@/lib/fetcher";
 import {
   UserProfile,
   PostItem,
@@ -110,6 +111,8 @@ const STORAGE_KEYS = {
 const swrConfig = { revalidateOnFocus: false, dedupingInterval: 60000 };
 
 export default function KinaraApp() {
+  const router = useRouter();
+
   // Navigation & View state
   const [currentView, setCurrentView] = useState("home");
   const [currentPersona, setCurrentPersona] = useState<PersonaRole>("citizen");
@@ -128,7 +131,7 @@ export default function KinaraApp() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   // SWR data fetching for 14 endpoints with caching (ALL-IN-ONE)
-  const { data: userData, isLoading: userLoading } = useSWR<{ user: UserProfile }>("/api/user", fetcher, swrConfig);
+  const { data: userData, error: userError, isLoading: userLoading } = useSWR<{ user: UserProfile }>("/api/user", fetcher, swrConfig);
   const { data: postsData, isLoading: postsLoading } = useSWR<{ posts: PostItem[]; nextCursor?: string | null }>("/api/posts?limit=20", fetcher, swrConfig);
   const { data: communitiesData, isLoading: commLoading } = useSWR<{ communities: CommunityItem[] }>("/api/communities", fetcher, swrConfig);
   const { data: marketplaceData, isLoading: marketLoading } = useSWR<{ items: MarketplaceProduct[]; data?: MarketplaceProduct[]; nextCursor?: string | null }>("/api/marketplace?limit=20", fetcher, swrConfig);
@@ -163,6 +166,15 @@ export default function KinaraApp() {
   useEffect(() => {
     if (userData?.user) setUser(userData.user);
   }, [userData]);
+
+  // Session probe: GET /api/user without ?id= requires an authenticated session.
+  // A 401 means "no session" rather than "something broke", so send the visitor to
+  // the sign-in screen instead of rendering the shell with a null user.
+  useEffect(() => {
+    if (userError instanceof FetchError && userError.status === 401) {
+      router.replace("/signin");
+    }
+  }, [userError, router]);
   useEffect(() => {
     if (postsData?.posts) {
       setPosts(postsData.posts);

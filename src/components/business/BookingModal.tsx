@@ -40,8 +40,20 @@ export function BookingModal({
           date,
         }),
       });
-      const data = await res.json();
-      const ref = data.bookingRef || `BK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const data = await res.json().catch(() => null);
+
+      // Never fabricate a reference: a 401/404/500 must surface as a failure, not as
+      // a "Booking Confirmed" screen for a reservation that does not exist.
+      if (!res.ok) {
+        toast.error(data?.error || "Booking request failed — nothing was reserved.");
+        return;
+      }
+      const ref = data?.bookingRef ?? data?.data?.bookingRef;
+      if (!ref) {
+        toast.error("Booking service returned no reference. Please try again.");
+        return;
+      }
+
       setBookingRef(ref);
       setDone(true);
       setTimeout(() => {

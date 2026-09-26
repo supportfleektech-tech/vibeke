@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { stories, users } from "@/db/schema";
 import { desc, eq, and, sql } from "drizzle-orm";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   try {
     const { rateLimit, getClientIp } = await import("@/lib/ratelimit");
     const ip = getClientIp(request);
-    const rl = rateLimit(`stories:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`stories:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     // Seed check if table empty
     const check = await db.select().from(stories).limit(1);
     if (check.length === 0) {
-      await seedDatabase();
+      await ensureSeeded();
     }
 
     // Build WHERE: expiresAt > now, authorId eq if provided, orderBy createdAt desc
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     const { getCurrentUserId } = await import("@/lib/get-user");
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`stories:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`stories:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -97,6 +97,9 @@ export async function POST(request: Request) {
     const { mediaUrl, mediaType, caption, durationHours } = parsed.data;
 
     const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const [currentUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     const author = currentUser || {
       id: userId,

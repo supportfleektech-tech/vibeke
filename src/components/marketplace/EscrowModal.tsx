@@ -35,8 +35,20 @@ export function EscrowModal({ isOpen, onClose, product, onSuccess }: EscrowModal
           note: `Escrow order placed via ${paymentRail.toUpperCase()}`,
         }),
       });
-      const data = await res.json();
-      const ref = data.escrowId || `ESC-${Math.floor(100000 + Math.random() * 900000)}`;
+      const data = await res.json().catch(() => null);
+
+      // Never fabricate a reference: a 401/404/500 must surface as a failure, not as
+      // a "vault locked" screen showing money that was never held.
+      if (!res.ok) {
+        toast.error(data?.error || "Escrow request failed — no funds were moved.");
+        return;
+      }
+      const ref = data?.escrowRef ?? data?.data?.escrowRef;
+      if (!ref) {
+        toast.error("Escrow provider returned no reference. Please try again.");
+        return;
+      }
+
       setEscrowRef(ref);
       setConfirmed(true);
       setTimeout(() => {

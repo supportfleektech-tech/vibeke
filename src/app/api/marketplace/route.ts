@@ -6,7 +6,7 @@ import { z } from "zod";
 import { marketplaceCreateSchema } from "@/lib/validators";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ const marketplaceQuerySchema = z.object({
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`marketplace:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`marketplace:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     // Transaction-safe seed check
     const check = await db.select().from(marketplaceItems).limit(1);
     if (check.length === 0) {
-      await seedDatabase();
+      await ensureSeeded();
     }
 
     // Build SQL WHERE with drizzle eq/and - index-aware
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`marketplace:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`marketplace:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -124,6 +124,9 @@ export async function POST(request: Request) {
 
     // Use authenticated sellerId
     const sellerId = await getCurrentUserId();
+    if (!sellerId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const sellerRows = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     const seller = sellerRows[0];
 

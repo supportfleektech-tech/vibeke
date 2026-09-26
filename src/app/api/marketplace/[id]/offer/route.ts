@@ -14,7 +14,7 @@ export async function POST(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`marketplace:offer:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`marketplace:offer:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -44,6 +44,9 @@ export async function POST(
     }
 
     const buyerId = await getCurrentUserId();
+    if (!buyerId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const amount = offerPrice ?? item.price;
     const escrowRef = `ESC-${crypto.randomUUID()}`;
     const sellerId = item.sellerId;

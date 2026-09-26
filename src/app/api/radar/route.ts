@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { localRadar } from "@/db/schema";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   try {
     // Rate-limit 30/min per IP (production-ready, prevents abuse)
     const ip = getClientIp(request);
-    const rl = rateLimit(`radar:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`radar:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
     // Transaction-safe seed check (avoid thundering herd: check first before seeding)
     const check = await db.select().from(localRadar).limit(1);
     if (check.length === 0) {
-      await seedDatabase();
+      await ensureSeeded();
     }
 
     // Index-aware query with SQL WHERE, limit/offset pagination - no JS filtering

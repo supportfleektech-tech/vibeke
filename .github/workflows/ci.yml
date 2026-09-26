@@ -16,6 +16,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/kinara_db
+      NEXTAUTH_SECRET: ci-test-secret-kinara-32-chars-minimum-for-testing
+      NEXTAUTH_URL: http://localhost:3000
+      SEED_SECRET: ci-seed-secret-not-a-real-secret
+      # Seed rows are only given a bcrypt hash when SEED_PASSWORD is set, so the
+      # correct-password sign-in check below depends on this being present.
+      SEED_PASSWORD: ci-seed-password-at-least-8-chars
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    # Real Postgres so the health smoke can assert `"ok":true` instead of merely
+    # "the process answered". A dead DB previously passed CI silently.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kinara_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kinara_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,7 +50,9 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # Must match the toolchain that wrote pnpm-lock.yaml (pnpm-workspace.yaml
+          # uses `allowBuilds`, which pnpm 9 does not understand).
+          version: 12
 
       - name: Setup Node 22
         uses: actions/setup-node@v4
@@ -40,67 +69,204 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Migrate
+        run: pnpm db:migrate
+
       - name: Tests
         run: pnpm test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/kinara_db
-          NEXTAUTH_SECRET: ci-test-secret-kinara-32-chars-minimum-for-testing
-          NEXTAUTH_URL: http://localhost:3000
 
       - name: Build
         run: pnpm build
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/kinara_db
-          NEXTAUTH_SECRET: ci-test-secret-kinara-32-chars-minimum-for-testing
-          NEXTAUTH_URL: http://localhost:3000
-          NEXT_TELEMETRY_DISABLED: "1"
 
-      # Health smoke — start the built app and probe /api/health
-      # DB is absent in CI by default, so health is expected to return 500
-      # when DB unavailable; we just verify the app boots and responds.
-      - name: Health check (smoke)
+      # Boots the built app against the service Postgres and asserts the security
+      # invariants from the code review. Everything runs in one step so the app only
+      # starts/stops once.
+      #
+      # Auth.js v5 rejects any POST to the credentials callback that does not carry a
+      # CSRF token, so every sign-in must handshake /api/auth/csrf first. Without it
+      # the callback fails with MissingCSRF, no session is issued, and an assertion
+      # like "wrong password did not sign in" passes while testing nothing.
+      - name: Smoke test (health, seed, auth, admin, rate limit, lockout)
         run: |
-          set -e
-          echo "Starting Next.js for health smoke test..."
-          DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/kinara_db \
-          NEXTAUTH_SECRET=ci-test-secret-kinara-32-chars-minimum-for-testing \
-          NEXTAUTH_URL=http://localhost:3000 \
+          set -uo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          BASE=http://localhost:3000
+
+          # credentials_signin <jar> <handle> <password> -> callback HTTP code
+          credentials_signin() {
+            local jar="$1" handle="$2" pw="$3" csrf
+            csrf=$(curl -s -c "$jar" -b "$jar" "$BASE/api/auth/csrf" \
+              | sed -n 's/.*"csrfToken":"\([^"]*\)".*/\1/p')
+            if [ -z "$csrf" ]; then echo "::error::no csrfToken for $handle"; return 1; fi
+            curl -s -o /tmp/signin.json -w "%{http_code}" -c "$jar" -b "$jar" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -X POST "$BASE/api/auth/callback/credentials" \
+              --data-urlencode "csrfToken=$csrf" \
+              --data-urlencode "handle=$handle" \
+              --data-urlencode "password=$pw" \
+              --data-urlencode "redirect=false" \
+              --data-urlencode "json=true" || echo 000
+          }
+
+          echo "Starting Next.js for smoke test..."
           pnpm start > /tmp/next.log 2>&1 &
           APP_PID=$!
           echo "PID=$APP_PID"
 
-          # Wait up to 30s for app to bind
-          for i in $(seq 1 15); do
-            if curl -fsS http://127.0.0.1:3000/api/health >/tmp/health.json 2>&1; then
-              echo "Health endpoint responded on attempt $i"
-              cat /tmp/health.json
+          # --- 1. health -------------------------------------------------------
+          HTTP_CODE=""
+          for i in $(seq 1 45); do
+            HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 3 $BASE/api/health || echo 000)
+            HTTP_CODE=$(printf '%s' "$HTTP_CODE" | tail -c 3)
+            if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
+              echo "Health endpoint answered on attempt $i (HTTP $HTTP_CODE)"
               break
             fi
             echo "Waiting for app... attempt $i"
             sleep 2
           done
 
-          # Show response (ok true if DB was available, ok false if not — both prove boot)
-          cat /tmp/health.json || echo "(no health.json — checking log)"
-          cat /tmp/next.log | tail -n 100 || true
+          echo "--- /api/health ---"; cat /tmp/health.json 2>/dev/null || echo "(none)"
+          echo "--- app log tail ---"; tail -n 60 /tmp/next.log || true
 
-          # Require HTTP response (5xx is acceptable when DB down; ensures Next didn't crash)
-          HTTP_CODE=$(curl -s -o /tmp/body.json -w "%{http_code}" http://127.0.0.1:3000/api/health || echo "000")
-          echo "Health HTTP code: $HTTP_CODE"
-          cat /tmp/body.json || true
+          [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ] || fail "Health endpoint never responded"
+          [ "$HTTP_CODE" -lt 500 ] || fail "Health endpoint returned HTTP $HTTP_CODE"
+          node -e 'const b=require("/tmp/health.json"); process.exit(b && b.ok === true ? 0 : 1)' \
+            || fail "Health body did not contain ok:true"
+          echo "PASS 1/8 health ok:true (HTTP $HTTP_CODE)"
 
-          # Clean up
-          kill $APP_PID || true
-          sleep 2
-          kill -9 $APP_PID 2>/dev/null || true
+          # --- 2. seed endpoint must be secret-protected ------------------------
+          CODE=$(curl -s -o /tmp/seed-noauth.json -w "%{http_code}" -X POST $BASE/api/seed || echo 000)
+          [ "$CODE" = "401" ] || fail "POST /api/seed without secret returned $CODE (expected 401)"
 
-          # Fail only if app did not respond at all
-          if [ "$HTTP_CODE" = "000" ]; then
-            echo "::error::Health endpoint did not respond"
-            exit 1
+          CODE=$(curl -s -o /tmp/seed-badauth.json -w "%{http_code}" -X POST \
+            -H "x-seed-secret: definitely-not-the-secret" $BASE/api/seed || echo 000)
+          [ "$CODE" = "401" ] || fail "POST /api/seed with wrong secret returned $CODE (expected 401)"
+
+          CODE=$(curl -s -o /tmp/seed-auth.json -w "%{http_code}" -X POST \
+            -H "x-seed-secret: ${SEED_SECRET}" $BASE/api/seed || echo 000)
+          if [ "$CODE" != "200" ]; then
+            cat /tmp/seed-auth.json || true
+            fail "POST /api/seed with valid secret returned $CODE"
           fi
+          node -e 'const b=require("/tmp/health.json");' 2>/dev/null || true
+          curl -s -o /tmp/health2.json $BASE/api/health || true
+          node -e 'const b=require("/tmp/health2.json"); process.exit(b && b.seeded === true ? 0 : 1)' \
+            || fail "Health did not report seeded:true after seeding"
+          echo "PASS 2/8 seed secret enforced and seed applied"
 
-          echo "Health smoke passed (HTTP $HTTP_CODE)"
+          # --- 3. anonymous callers are rejected and public reads leak nothing ---
+          CODE=$(curl -s -o /tmp/user.json -w "%{http_code}" $BASE/api/user || echo 000)
+          [ "$CODE" = "401" ] || fail "GET /api/user anonymously returned $CODE (expected 401)"
+          CODE=$(curl -s -o /tmp/admin.json -w "%{http_code}" $BASE/api/admin/stats || echo 000)
+          [ "$CODE" = "401" ] || fail "GET /api/admin/stats anonymously returned $CODE (expected 401)"
+          CODE=$(curl -s -o /tmp/messages.json -w "%{http_code}" $BASE/api/messages || echo 000)
+          [ "$CODE" = "401" ] || fail "GET /api/messages anonymously returned $CODE (expected 401)"
+
+          CODE=$(curl -s -o /tmp/public.json -w "%{http_code}" "$BASE/api/user?id=usr_brian_mwangi" || echo 000)
+          [ "$CODE" = "200" ] || fail "GET /api/user?id= anonymously returned $CODE (expected 200)"
+          grep -Eq "passwordHash|password_hash" /tmp/public.json \
+            && fail "public profile response leaked passwordHash" || true
+          grep -q '"email"' /tmp/public.json \
+            && fail "public profile response leaked email" || true
+          echo "PASS 3/8 anonymous 401s hold and public profile leaks nothing"
+
+          # --- 4. credentials: wrong password rejected, right password accepted ---
+          JAR=$(mktemp)
+          CODE=$(credentials_signin "$JAR" "brianmwangi" "definitely-the-wrong-password") || fail "csrf handshake failed"
+          echo "wrong password callback -> HTTP $CODE"
+          if grep -Eq "session-token|kinara_session" "$JAR"; then
+            cat "$JAR"; fail "Wrong password still issued a session cookie"
+          fi
+          grep -q "CredentialsSignin" /tmp/next.log \
+            || fail "Wrong password did not produce CredentialsSignin in the server log"
+          rm -f "$JAR"
+
+          JAR=$(mktemp)
+          CODE=$(credentials_signin "$JAR" "brianmwangi" "${SEED_PASSWORD}") || fail "csrf handshake failed"
+          echo "correct password callback -> HTTP $CODE"
+          if ! grep -Eq "session-token|kinara_session" "$JAR"; then
+            cat "$JAR" /tmp/signin.json 2>/dev/null || true
+            fail "Correct password did not issue a session cookie (credentials provider is broken)"
+          fi
+          echo "PASS 4/8 credentials provider rejects bad passwords and accepts good ones"
+
+          # --- 5. authenticated citizen: no admin, cannot self-promote ------------
+          CODE=$(curl -s -o /tmp/me.json -w "%{http_code}" -b "$JAR" $BASE/api/user || echo 000)
+          [ "$CODE" = "200" ] || fail "GET /api/user with a session returned $CODE (expected 200)"
+          grep -Eq '"passwordHash"' /tmp/me.json && fail "own profile leaked passwordHash" || true
+          grep -q 'brianmwangi' /tmp/me.json || fail "own profile did not contain the signed-in user"
+
+          CODE=$(curl -s -o /tmp/citizen-admin.json -w "%{http_code}" -b "$JAR" $BASE/api/admin/stats || echo 000)
+          [ "$CODE" = "403" ] || fail "citizen GET /api/admin/stats returned $CODE (expected 403)"
+
+          CODE=$(curl -s -o /tmp/escalate.json -w "%{http_code}" -b "$JAR" -X PATCH \
+            -H "Content-Type: application/json" -d '{"role":"admin"}' $BASE/api/user || echo 000)
+          [ "$CODE" = "400" ] || { cat /tmp/escalate.json; fail "PATCH /api/user {role:admin} returned $CODE (expected 400)"; }
+
+          curl -s -o /tmp/after.json -b "$JAR" $BASE/api/user || true
+          grep -q '"role":"citizen"' /tmp/after.json \
+            || fail "role escalation attempt mutated the user row: $(cat /tmp/after.json)"
+          rm -f "$JAR"
+          echo "PASS 5/8 citizen is 403 on admin routes and cannot self-promote"
+
+          # --- 6. seeded admin can actually reach the admin routes ---------------
+          JAR=$(mktemp)
+          CODE=$(credentials_signin "$JAR" "kinara_admin" "${SEED_PASSWORD}") || fail "csrf handshake failed"
+          if ! grep -Eq "session-token|kinara_session" "$JAR"; then
+            cat /tmp/signin.json 2>/dev/null || true
+            fail "Seeded admin could not sign in"
+          fi
+          CODE=$(curl -s -o /tmp/admin-stats.json -w "%{http_code}" -b "$JAR" $BASE/api/admin/stats || echo 000)
+          [ "$CODE" = "200" ] || { cat /tmp/admin-stats.json; fail "admin GET /api/admin/stats returned $CODE (expected 200)"; }
+          rm -f "$JAR"
+          echo "PASS 6/8 seeded admin reaches admin routes"
+
+          # --- 7. rate limiting actually engages ---------------------------------
+          RL=0
+          for i in $(seq 1 40); do
+            # /api/search exports GET only - a POST would get 405 and never reach
+            # the limiter, making this assertion vacuously false.
+            RC=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/search?q=rate$i&type=people" || echo 000)
+            if [ "$RC" = "429" ]; then RL=$((RL+1)); fi
+          done
+          if [ "$RL" -eq 0 ]; then fail "rate limiter never returned 429 in 40 GETs"; fi
+          echo "PASS 7/8 rate limiter returned 429 ($RL/40)"
+
+          # --- 8. credential lockout engages and is scoped to one handle --------
+          # Deliberately uses a handle no other check depends on: ten failures
+          # must lock THAT handle while leaving the shared IP bucket (30) usable.
+          LK=$(mktemp)
+          for i in $(seq 1 10); do
+            credentials_signin "$LK" "folake_lagos" "definitely-wrong-$i" >/dev/null \
+              || fail "csrf handshake failed on lockout attempt $i"
+          done
+
+          credentials_signin "$LK" "folake_lagos" "${SEED_PASSWORD}" >/dev/null \
+            || fail "csrf handshake failed for the locked handle"
+          echo "locked handle + CORRECT password -> HTTP $CODE"
+          if grep -Eq "session-token|kinara_session" "$LK"; then
+            cat "$LK"; fail "Locked account still issued a session for the correct password"
+          fi
+          grep -q 'sign-in refused for "folake_lagos"' /tmp/next.log \
+            || fail "lockout refusal was not logged server-side"
+          rm -f "$LK"
+
+          JAR=$(mktemp)
+          credentials_signin "$JAR" "brianmwangi" "${SEED_PASSWORD}" >/dev/null \
+            || fail "csrf handshake failed for the unrelated handle"
+          if ! grep -Eq "session-token|kinara_session" "$JAR"; then
+            cat "$JAR" /tmp/signin.json 2>/dev/null || true
+            fail "One locked handle locked every account from the same IP"
+          fi
+          rm -f "$JAR"
+          echo "PASS 8/8 credential lockout engages and is scoped to one handle"
+
+          # --- cleanup ---------------------------------------------------------
+          kill "$APP_PID" 2>/dev/null || true
+          sleep 2
+          kill -9 "$APP_PID" 2>/dev/null || true
+          echo "All smoke checks passed (8/8)"
 
       - name: Upload health artifact (on failure)
         if: failure()

@@ -14,7 +14,7 @@ const markReadSchema = z.object({
 
 async function handleMarkRead(request: Request) {
   const ip = getClientIp(request);
-  const rl = rateLimit(`notifications:read:${ip}`, 30, 60_000);
+  const rl = await rateLimit(`notifications:read:${ip}`, 30, 60_000);
   if (!rl.success) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again soon." },

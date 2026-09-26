@@ -1,5 +1,26 @@
+import bcrypt from "bcryptjs";
 import { db } from "./index";
 import { users, posts, communities, marketplaceItems, businesses, messages, jobs, localRadar, threads, communityMembers, clips, stories, lives, events, hashtags, notifications } from "./schema";
+
+/**
+ * Bcrypt hash applied to every seeded account.
+ *
+ * Login requires a matching password (`src/lib/auth.ts`), so without this the seeded
+ * accounts would be unreachable. `SEED_PASSWORD` must be >= 8 characters; when it is
+ * missing or too short we seed `NULL` instead, which fails closed - those rows simply
+ * cannot be logged into.
+ */
+function buildSeedPasswordHash(): string | null {
+  const password = process.env.SEED_PASSWORD;
+  if (!password || password.length < 8) {
+    console.warn(
+      "[seed] SEED_PASSWORD is missing or shorter than 8 characters - seeded users will have no login credential. " +
+        "Set SEED_PASSWORD in .env.local to enable sign-in."
+    );
+    return null;
+  }
+  return bcrypt.hashSync(password, 10);
+}
 
 export async function seedDatabase() {
   const existingUsers = await db.select().from(users);
@@ -10,9 +31,12 @@ export async function seedDatabase() {
 
   console.log("Seeding Kinara sovereign platform database...");
 
+  const passwordHash = buildSeedPasswordHash();
+
   // Users - need to insert all referenced authorIds before posts
   // Also insert additional seeded users for posts
-  await db.insert(users).values([
+  await db.insert(users).values(
+    [
     {
       id: "usr_brian_mwangi",
       name: "Brian Mwangi",
@@ -94,7 +118,30 @@ export async function seedDatabase() {
       achievements: [],
       preferences: {},
     },
-  ]);
+    {
+      // Platform moderation account. `role: "admin"` is what `requireAdmin()` looks
+      // for on /api/admin/* and /api/reports/*; without it those routes 403 for
+      // everyone. Shares the same SEED_PASSWORD as the other seeded accounts.
+      id: "usr_kinara_admin",
+      name: "KINARA Admin",
+      handle: "kinara_admin",
+      avatar: "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      cover: "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800",
+      bio: "Platform trust & safety. Reviews reports, handles escalations, keeps escrow fair.",
+      role: "admin",
+      location: "Nairobi, Kenya",
+      trustScore: 100,
+      verified: true,
+      verificationType: "Biometric & Escrow Certified",
+      followersCount: 0,
+      followingCount: 0,
+      marketplaceRating: "5.00",
+      skills: ["Trust & Safety", "Moderation"],
+      achievements: [],
+      preferences: {},
+    },
+    ].map((row) => ({ ...row, passwordHash }))
+  );
 
   await db.insert(threads).values([
     { id: "th_folake", title: "Lagos-Nairobi Corridor", participants: ["usr_brian_mwangi", "usr_folake_adebayo"], type: "direct" },
@@ -851,4 +898,28 @@ export async function seedDatabase() {
   ]);
 
   console.log("Database seeded successfully with Kinara sovereign platform data!");
+}
+
+let seedInFlight: Promise<void> | null = null;
+
+/**
+ * Idempotent, single-flight wrapper around `seedDatabase()`.
+ *
+ * Several read endpoints populate a cold database on first hit. Without the shared
+ * in-flight promise, N concurrent requests would race N identical seed runs and
+ * duplicate the "is it seeded?" check. Errors clear the promise so the next request
+ * retries instead of caching a failure forever.
+ *
+ * Auto-seeding is a write side effect, so it is disabled in production unless
+ * `AUTO_SEED=true` is set explicitly.
+ */
+export async function ensureSeeded(): Promise<void> {
+  if (process.env.NODE_ENV === "production" && process.env.AUTO_SEED !== "true") return;
+  if (!seedInFlight) {
+    seedInFlight = seedDatabase().catch((err) => {
+      seedInFlight = null;
+      throw err;
+    });
+  }
+  return seedInFlight;
 }
