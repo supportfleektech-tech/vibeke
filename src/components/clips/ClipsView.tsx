@@ -86,16 +86,25 @@ export function ClipsView({ clips: externalClips, initialClips }: ClipsViewProps
     return out;
   }, [rawClips, activeTab, hashtagFilter, soundFilter]);
 
-  // Clamp currentIndex when filtered length changes
-  useEffect(() => {
+  // Clamp currentIndex when the filtered list shrinks. This runs during render
+  // (React's documented "adjusting state when a prop changes" pattern) instead of
+  // in an effect, which would force an extra cascading render pass.
+  const [prevFilteredLen, setPrevFilteredLen] = useState(filteredClips.length);
+  if (prevFilteredLen !== filteredClips.length) {
+    setPrevFilteredLen(filteredClips.length);
     if (filteredClips.length === 0) {
       setCurrentIndex(0);
-      return;
-    }
-    if (currentIndex >= filteredClips.length) {
+    } else if (currentIndex >= filteredClips.length) {
       setCurrentIndex(Math.max(0, filteredClips.length - 1));
     }
-  }, [filteredClips.length, currentIndex]);
+  }
+
+  // Declared before the keydown effect below so it is never referenced before init.
+  const scrollToIndex = useCallback((idx: number) => {
+    if (!containerRef.current) return;
+    const el = itemRefs.current.get(idx);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
 
   // IntersectionObserver to sync currentIndex to visible item
   useEffect(() => {
@@ -146,15 +155,6 @@ export function ClipsView({ clips: externalClips, initialClips }: ClipsViewProps
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredClips.length, currentIndex, isMuted]);
-
-  const scrollToIndex = useCallback(
-    (idx: number) => {
-      if (!containerRef.current) return;
-      const el = itemRefs.current.get(idx);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    },
-    []
-  );
 
   // When currentIndex changes programmatically, scroll
   useEffect(() => {

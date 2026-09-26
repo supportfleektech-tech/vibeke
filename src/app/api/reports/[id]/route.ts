@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { reports, users } from "@/db/schema";
+import { reports } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
-import { getCurrentUserId } from "@/lib/get-user";
+import { requireAdmin } from "@/lib/require-admin";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export async function GET(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`reports:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`reports:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 requests per minute." },
@@ -37,6 +37,10 @@ export async function GET(
         }
       );
     }
+
+    // Reports contain reporter identity and abuse details - moderation data only.
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
 
     const { id } = await params;
     const reportId = parseInt(id, 10);
@@ -63,7 +67,7 @@ export async function PATCH(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`reports:update:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`reports:update:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 updates per minute." },
@@ -79,18 +83,10 @@ export async function PATCH(
       );
     }
 
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Admin check via role - for demo allow but log if not admin
-    const [currentUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (currentUser && currentUser.role !== "admin") {
-      logger.info({ userId, role: currentUser.role }, "Non-admin attempting report status update (allowed for demo)");
-      // In production, uncomment to enforce:
-      // return NextResponse.json({ error: "Forbidden - admin only" }, { status: 403 });
-    }
+    // Admin check via role - enforced, not advisory.
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
 
     const { id } = await params;
     const reportId = parseInt(id, 10);

@@ -16,7 +16,7 @@ const uploadSchema = z.object({
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`upload:create:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`upload:create:${ip}`, 20, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 20 uploads per minute." },

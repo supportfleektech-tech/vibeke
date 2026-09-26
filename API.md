@@ -93,11 +93,13 @@ curl -f http://localhost:3000/api/health || exit 1
 
 Idempotently populates all 15 tables. Called automatically by any read that finds an empty table, but the explicit POST is the operator entrypoint.
 
-**Auth**: If `SEED_SECRET` env is set, require header `x-seed-secret: <SEED_SECRET>`. Otherwise open.  
+**Auth**: `SEED_SECRET` **must** be configured. Requests without the header, or with a
+value that does not match (compared timing-safe), get `401`. If `SEED_SECRET` is unset
+or empty the endpoint gets `503` — seeding is never left open by omission.
 **Rate limit**: `seed:{ip} 3/min`.
 
-| Header | Required if `SEED_SECRET` set | Description |
-|--------|-------------------------------|-------------|
+| Header | Required | Description |
+|--------|----------|-------------|
 | `x-seed-secret` | ✅ | Must equal `SEED_SECRET` |
 
 **Request**: empty body (any JSON ignored).
@@ -114,9 +116,16 @@ Idempotently populates all 15 tables. Called automatically by any read that find
 { "success": false, "error": "Unauthorized: invalid or missing x-seed-secret" }
 ```
 
+**Response 503** (no `SEED_SECRET` configured):
+
+```json
+{ "success": false, "error": "Seeding is disabled: SEED_SECRET is not configured." }
+```
+
 **Response 429** + `Retry-After`.
 
-**Deprecated GET** `GET /api/seed` (no secret needed, but rate-limited) → `200 { success, message, deprecated:true }` with warning logged. Migrate to POST.
+**`GET /api/seed`** — not an auth bypass. It is rejected with `401` like every other
+seeding entrypoint; only `POST` with the secret can seed.
 
 **curl**:
 
@@ -124,14 +133,14 @@ Idempotently populates all 15 tables. Called automatically by any read that find
 # with secret
 curl -X POST http://localhost:3000/api/seed -H "x-seed-secret: kinara-seed-local-only" | jq
 
-# without secret (if SEED_SECRET empty)
+# missing / wrong secret -> 401
 curl -X POST http://localhost:3000/api/seed | jq
 
-# deprecated GET (emits warning, still works)
+# GET is also 401, not an open alternative
 curl http://localhost:3000/api/seed | jq
 ```
 
-**Idempotency**: `SELECT * FROM users LIMIT 1` guard in `seedDatabase()` (`src/db/seed.ts:6`). Concurrent calls safe (rate limit + guard). Data inserted: 4 users, 4 posts, 4 communities, 3 communityMembers, 5 marketplaceItems, 2 businesses, 3 messages, 3 jobs, 5 radar pins, 3 threads.
+**Idempotency**: `SELECT * FROM users LIMIT 1` guard in `seedDatabase()` (`src/db/seed.ts`). Concurrent calls safe (rate limit + guard). Data inserted: 5 users (citizen/creator/business/creator + a dedicated `kinara_admin`), 4 posts, 4 communities, 3 communityMembers, 5 marketplaceItems, 2 businesses, 3 messages, 3 jobs, 5 radar pins, 3 threads. Every seeded user gets `password_hash = bcrypt(SEED_PASSWORD)`; if `SEED_PASSWORD` is unset the hash is `NULL` and those accounts cannot log in.
 
 ---
 
@@ -1169,24 +1178,34 @@ Update own profile fields. Uses sovereign `userId`.
 ```ts
 userPatchSchema = z.object({
   bio:      z.string().max(500).optional(),
-  role:     personaEnum.optional(),  // citizen|creator|business|student|buyer
   location: z.string().max(100).optional(),
   name:     z.string().max(100).optional(),
 })
 ```
+
+`role` is **not** accepted. It used to be, which let any signed-in user PATCH
+`{"role":"admin"}` and pass `requireAdmin()`. It is now stripped from the schema, so
+such a body fails validation with `400` and never reaches the `UPDATE` — the stored
+role is untouched.
 
 Only provided fields are updated (`SET` via drizzle). Empty body `400`.
 
 **Request**:
 
 ```json
-{ "bio": "Building sovereign edge systems across the Rift Valley.", "role": "creator" }
+{ "bio": "Building sovereign edge systems across the Rift Valley." }
 ```
 
 **Response 200**:
 
 ```json
-{ "user": { "id":"usr_brian_mwangi","bio":"Building...","role":"creator","updatedAt":"..." }, "success":true }
+{ "user": { "id":"usr_brian_mwangi","bio":"Building...","role":"citizen","updatedAt":"..." }, "success":true }
+```
+
+**Response 400** for a privilege-escalation attempt:
+
+```json
+{ "success": false, "error": "Validation failed", "details": { "role": ["Invalid input"] } }
 ```
 
 **curl**:
@@ -1218,6 +1237,8 @@ See `ARCHITECTURE.md` §6 for flow and env.
 | Key prefix | Limit | Window | Routes |
 |------------|-------|--------|--------|
 | `seed` | 3 | 60s | `POST /api/seed` / `GET /api/seed` |
+| `login:handle` | 10 | 15 min | `POST /api/auth/callback/credentials` — counted on **failed** sign-ins only |
+| `login:ip` | 30 | 15 min | `POST /api/auth/callback/credentials` — counted on **failed** sign-ins only |
 | `ai` | 20 | 60s | `POST /api/ai` |
 | `search` | 30 | 60s | `GET /api/search` |
 | `posts:create` | 10 | 60s | `POST /api/posts` |
@@ -1237,7 +1258,9 @@ See `ARCHITECTURE.md` §6 for flow and env.
 | `jobs:apply:get` | 30 | 60s | `GET /api/jobs/[id]/apply` |
 | `radar` | 30 | 60s | `GET /api/radar` |
 
-All use `getClientIp(req)` → `x-forwarded-for[0] | x-real-ip | 127.0.0.1`.
+All use `getClientIp(req)` → `x-vercel-forwarded-for[0] | x-forwarded-for[LAST hop] | x-real-ip | 127.0.0.1`.
+The **last** XFF hop is used because it is appended by the proxy in front of the app;
+reading the first hop let a client rotate the header per request and bypass every limit.
 
 ---
 
@@ -1255,7 +1278,7 @@ postCreateSchema     = { content 1..2000, category 1..50 default trending, city 
                          mediaUrl url? | "", mediaType text|image|video default text, tags string[10], pinned bool }
 
 // Profile
-userPatchSchema      = { bio max500?, role personaEnum?, location max100?, name max100? }
+userPatchSchema      = { bio max500?, location max100?, name max100? }   // NO role — see /api/user
 
 // AI
 aiSchema             = { action 10-enum, text max5000 default "", context any?, targetLanguage max20? }

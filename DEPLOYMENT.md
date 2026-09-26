@@ -56,9 +56,15 @@ services:
     ports: ["3000:3000"]
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/kinara_db
-      NEXTAUTH_SECRET: change-me-in-production-generate-32chars-min
+      # Interpolated from your shell / .env — never hardcode. The app refuses to boot
+      # in production with a known-placeholder secret, so an unset value fails loudly.
+      #   export NEXTAUTH_SECRET=$(openssl rand -base64 48)
+      #   export SEED_SECRET=$(openssl rand -hex 24)
+      #   export SEED_PASSWORD=<min 8 chars, for the seeded accounts>
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       NEXTAUTH_URL: http://localhost:3000
-      SEED_SECRET: kinara-seed-local-only
+      SEED_SECRET: ${SEED_SECRET:-}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
       # optional: OPENROUTER_API_KEY, AI_MODEL, UPSTASH_*, SENTRY_DSN
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q '\"ok\":true' || exit 1"]
@@ -176,7 +182,10 @@ If `wget` is missing, replace with `node -e "fetch('http://127.0.0.1:3000/api/he
 - Create project → copy pooled connection string (ends with `-pooler.neon.tech`) → paste as `DATABASE_URL` in Vercel.
 - Ensure `sslmode=require` is present.
 - `drizzle.config.ts:8` uses `process.env.DATABASE_URL`; no extra config.
-- `src/db/index.ts:18` auto-enables `ssl: { rejectUnauthorized:false }` when `NODE_ENV===production`.
+- `src/db/index.ts` resolves TLS via `resolveSsl()`: an explicit `sslmode=` in
+  `DATABASE_URL` wins, loopback/`db`/`localhost` stay plaintext (docker-compose, CI),
+  and any other host is forced to TLS with `rejectUnauthorized:false`. Hosted Postgres
+  should still carry `?sslmode=require` explicitly.
 
 **Supabase**:
 

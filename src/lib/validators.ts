@@ -16,7 +16,8 @@ export const postCreateSchema = z.object({
 
 export const userPatchSchema = z.object({
   bio: z.string().max(500).optional(),
-  role: personaEnum.optional(),
+  // `role` is intentionally absent: it decides admin/moderator privileges, so it must
+  // never be settable from an authenticated-but-unprivileged request body.
   location: z.string().max(100).optional(),
   name: z.string().max(100).optional(),
 });

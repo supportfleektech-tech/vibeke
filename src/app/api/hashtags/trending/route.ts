@@ -15,7 +15,7 @@ const querySchema = z.object({
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`hashtags:trending:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`hashtags:trending:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },

@@ -4,6 +4,7 @@ import { follows, users } from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
+import { publicUserColumns, type PublicUser } from "@/lib/user-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function POST(
     }
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`follow:${userId}:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`follow:${userId}:${ip}`, 20, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 20 follows per minute." },
@@ -176,17 +177,21 @@ export async function GET(
     const offset = Math.max(isNaN(parsedOffset) ? 0 : parsedOffset, 0);
 
     // Verify target exists
-    const [targetUser] = await db.select().from(users).where(eq(users.id, targetId)).limit(1);
+    const [targetUser] = await db
+      .select({ id: users.id, followersCount: users.followersCount })
+      .from(users)
+      .where(eq(users.id, targetId))
+      .limit(1);
     if (!targetUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    let resultUsers: (typeof users.$inferSelect)[] = [];
+    let resultUsers: PublicUser[] = [];
 
     if (type === "followers") {
       // Find users who follow targetId: follows.followingId = targetId -> join users on followerId
       const rows = await db
-        .select({ user: users })
+        .select({ user: publicUserColumns })
         .from(follows)
         .innerJoin(users, eq(users.id, follows.followerId))
         .where(eq(follows.followingId, targetId))
@@ -197,7 +202,7 @@ export async function GET(
     } else {
       // Find users that targetId follows: follows.followerId = targetId -> join users on followingId
       const rows = await db
-        .select({ user: users })
+        .select({ user: publicUserColumns })
         .from(follows)
         .innerJoin(users, eq(users.id, follows.followingId))
         .where(eq(follows.followerId, targetId))

@@ -51,12 +51,20 @@ services:
     environment:
       # Database — internal compose DNS "db"
       DATABASE_URL: postgresql://postgres:postgres@db:5432/kinara_db
-      # Auth
-      NEXTAUTH_SECRET: change-me-in-production-generate-32chars-min
-      NEXTAUTH_URL: http://localhost:3000
+      # Auth — REQUIRED in production. Supply via a host `.env` file (see .env.example):
+      #   NEXTAUTH_SECRET=$(openssl rand -base64 48)
+      # Left empty, the app refuses to boot with a clear error rather than signing
+      # sessions with a publicly-known placeholder.
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NODE_ENV: production
-      # Seed (set random in production, e.g. openssl rand -hex 32)
-      SEED_SECRET: kinara-seed-local-only
+      # Seed protection — REQUIRED in production for POST /api/seed:
+      #   SEED_SECRET=$(openssl rand -hex 24)
+      # Left empty, the seed endpoint answers 503 instead of accepting anyone.
+      SEED_SECRET: ${SEED_SECRET:-}
+      # Shared password applied to seeded demo accounts (>= 8 chars). Empty = those
+      # accounts are seeded with no credential and cannot sign in.
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
       # AI (optional real provider)
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

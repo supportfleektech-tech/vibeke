@@ -54,7 +54,7 @@ export async function POST(
 
     // Rate limit: 20/min per IP
     const ip = getClientIp(request);
-    const rl = rateLimit(`communities:join:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`communities:join:${ip}`, 20, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 20 join/leave per minute." },

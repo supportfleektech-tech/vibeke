@@ -24,12 +24,12 @@
 
 | Threat | Current Mitigation | Residual Risk & Next |
 |--------|-------------------|---------------------|
-| Credential theft / brute force | Credentials via Auth.js JWT, rate-limit per IP on `ai/like/comments/seed/apply`, httpOnly session cookie | No password at all in demo (see §2). Prod must add bcrypt + lockout. |
+| Credential theft / brute force | Credentials via Auth.js JWT; every login does `bcrypt.compare` against `users.password_hash`; a row with a `NULL` hash cannot log in; credentials + all write routes rate-limit per IP; no demo/admin identity bypasses verification; failed sign-ins are counted per handle (10/15min) and per IP (30/15min), and bcrypt never runs once a bucket is full — see §3 | Lockout is keyed on IP as well as handle, so an attacker who can supply an IP can deliberately lock a victim's handle (account-lockout DoS). Ship a captcha or email-verification unlock before facing the public internet. |
 | DoS (scraping / burst) | Per-route per-IP in-memory LRU rate limits (5–30/min) + `Retry-After` | Single-instance only — see §3 for distributed swap. |
 | Injection (SQL / XSS) | Drizzle ORM param-safe queries; React escapes by default; Zod trim/max/URL validation; ` dangerouslySetInnerHTML` not used | Keep CSP tight; add `dompurify` if richer HTML rendering ever lands. |
-| IDOR / authz | `getCurrentUserId()` check → `401` on protected routes; `communityMembers` / `jobApplications` unique constraints gate join/apply; escrow transaction verifies seller exists | Add explicit ownership checks for `PATCH /api/user` and `POST /api/businesses/[id]/book` verification. |
-| Leakage of seed / secrets | Env-only (`DATABASE_URL`, `NEXTAUTH_SECRET`, keys); `.env*` gitignored; `SEED_SECRET` gate; `NEXT_PUBLIC_*` limited to Mapbox token | Rotate immediately if `ghp_*` exposed — see §7. |
-| TLS / framing | `X-Frame-Options:DENY`, `X-Content-Type-Options:nosniff`, `Referrer-Policy`, `Permissions-Policy`; SSL when `NODE_ENV===production` via `pg.Pool ssl` | Add HSTS + full CSP (`frame-ancestors none`) — see §6. |
+| IDOR / authz | `getCurrentUserId()` returns `null` when signed out → `401` (no hardcoded fallback identity). `GET/PATCH /api/user`, `messages`, `reports`, `admin/*` all gate on it; `messages` additionally scopes the query to threads the caller participates in and answers `404` (not `403`) for foreign thread ids; `communityMembers` / `jobApplications` unique constraints gate join/apply; escrow transaction verifies seller exists | Keep adding explicit ownership checks as new routes land — `requireAdmin()` in `src/lib/require-admin.ts` is the pattern for role-gated reads. |
+| Leakage of seed / secrets | Env-only (`DATABASE_URL`, `NEXTAUTH_SECRET`, keys); `.env*` gitignored; `SEED_SECRET` gate with timing-safe compare (missing → 401, unset → 503, no `GET` bypass); known placeholder secrets are denylisted so they can never sign sessions; `NEXT_PUBLIC_*` limited to Mapbox token | Rotate immediately if `ghp_*` exposed — see §7. |
+| TLS / framing | `X-Frame-Options:DENY`, `X-Content-Type-Options:nosniff`, `Referrer-Policy`, `Permissions-Policy`; `resolveSsl()` in `src/db/index.ts` — explicit `sslmode=` in `DATABASE_URL` wins, loopback/`db`/`localhost` stay plain, any other host is forced to TLS | Add HSTS + full CSP (`frame-ancestors none`) — see §6. |
 | Escrow tampering | Transaction on `escrowTransactions.insert + messages.insert`; `escrowRef unique`; `status` enum with vault metadata | Integrate real M-Pesa Daraja signing + webhook verification — see §8. |
 
 ---
@@ -38,66 +38,99 @@
 
 **File**: `src/lib/auth.ts` (+ `src/lib/get-user.ts`, `src/app/api/auth/[...nextauth]/route.ts`)
 
-Current implementation is **sovereign demo**: single verified identity `usr_brian_mwangi` with no password store.
+Implementation is a real credentials check — there is **no demo identity and no
+password-less path**. `authorize()` looks the handle up in Postgres and compares
+against a stored bcrypt hash:
 
 ```ts
-// src/lib/auth.ts:24 — authorize()
-async authorize(credentials) {
-  const parsed = credentialsSchema.safeParse(credentials)
-  if (!parsed.success) return null
-  const handle = (credentials as any)?.handle || "brianmwangi"
-  return { id:"usr_brian_mwangi", name:"Brian Mwangi", email:"brian@kinara.ke",
-           handle, image:"...", trustScore:98 } as any
-}
+// src/lib/auth.ts — authorize()
+const parsed = credentialsSchema.safeParse(credentials)   // handle 1..64, password 1..256
+if (!parsed.success) return null
+
+const rows = await db
+  .select({ id, name, email, handle, avatar, trustScore, role, passwordHash })
+  .from(users).where(eq(users.handle, parsed.data.handle)).limit(1)
+const user = rows[0]
+// A row with no hash (e.g. seeded without SEED_PASSWORD) can never sign in.
+if (!user?.passwordHash) return null
+if (!(await bcrypt.compare(parsed.data.password, user.passwordHash))) return null
 ```
 
-**Config** (`src/lib/auth.ts:14`):
+**Config** (`src/lib/auth.ts`):
 
 ```ts
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.NEXTAUTH_SECRET || "dev-secret-kinara-32-chars-minimum-for-testing",
+  secret: resolveAuthSecret(),          // see "Secret policy" below
   session: { strategy: "jwt" },
-  trustHost: true,
-  providers: [ Credentials({ ... }) ],
+  trustHost: true,                      // required — see note below
+  providers: [ Credentials({ credentials: { handle, password }, authorize }) ],
   callbacks: {
     async jwt({token,user}) { if(user){ token.id=user.id; token.handle=user.handle; token.trustScore=user.trustScore } return token },
     async session({session,token}) { if(token){ session.userId=token.id; session.handle=token.handle } return session },
   },
-  pages: { signIn: "/api/auth/signin" },
+  pages: { signIn: "/signin" },
 })
 ```
 
-**Pool SSL**: `src/db/index.ts:18` enables `ssl:{rejectUnauthorized:false}` only when `NODE_ENV===production` (needed for Neon/Supabase). Local dev skips TLS.
+### Secret policy
 
-### Production swap
+`resolveAuthSecret()` fails closed:
 
-Replace `authorize` body with:
+- `NEXTAUTH_SECRET` must be ≥32 chars **and** not one of the publicly-known
+  placeholders in `KNOWN_INSECURE_SECRETS` (`change-me-in-production-generate-32chars-min`,
+  `dev-secret-kinara-32-chars-minimum-for-testing`). These values are printed in
+  `.env.example`, `docker-compose.yml` and older docs, so anyone who has read the repo
+  could otherwise forge a session for any user.
+- In production with a weak/absent secret the module **throws at boot** rather than
+  silently signing with something guessable. `next build` is exempted via
+  `NEXT_PHASE=phase-production-build` so the check becomes a runtime failure, not an
+  unbuildable image.
+- Dev/test get a random per-process key (`randomBytes(32)`), so dev sessions simply
+  reset on restart instead of using a public constant.
 
-```ts
-import bcrypt from "bcryptjs"
-import { db } from "@/db"
-import { users } from "@/db/schema"
-import { eq } from "drizzle-orm"
+### `trustHost: true`
 
-const u = (await db.select().from(users).where(eq(users.handle, handle)).limit(1))[0]
-if (!u || !u.passwordHash) return null
-const ok = await bcrypt.compare(credentials.password, u.passwordHash)
-if (!ok) return null
-return { id:u.id, name:u.name, email: u.email, handle:u.handle, trustScore:u.trustScore, image:u.avatar }
-```
+`@auth/core`'s `assertConfig()` throws `UntrustedHost` for **every** request when
+`trustHost` is false — there is no host comparison anywhere in the code. It is a hard
+prerequisite for the library, not a hardening toggle, so setting it to `false` in
+production disables authentication outright. Correctness instead depends on the
+platform setting the `Host` header safely (Vercel, and any reverse proxy that
+overwrites it, do). If you terminate TLS directly on Node without a proxy, do not
+expose the port publicly.
 
-Store `passwordHash` (`bcrypt 12`), never plaintext. Add columns `passwordHash text`, `emailVerified boolean`.
+### Identity lookup
+
+- `getCurrentUserId()` (`src/lib/get-user.ts`) returns `Promise<string | null>`. It
+  **never** falls back to a hardcoded user, so `!userId → 401` is a real gate for
+  every protected route (`user`, `messages`, `posts`, `stories`, `marketplace`,
+  `reports`, `admin/*`, …).
+- `GET /api/user` without `?id=` requires a session; with `?id=` it returns the
+  `publicUserColumns` projection. `passwordHash` and `email` are excluded from every
+  public projection (`src/lib/user-columns.ts`).
+- `requireAdmin()` (`src/lib/require-admin.ts`) is the role gate for `admin/*` and
+  `reports/*`: `401` when signed out, `403` when the caller is not admin/moderator.
+  A seeded `kinara_admin` / `kinara_admin` handle exists so the gate is reachable.
+- `userPatchSchema` no longer contains `role`, so `PATCH /api/user {"role":"admin"}`
+  fails validation (`400`) and never runs an `UPDATE`.
+
+**Pool TLS**: `resolveSsl()` in `src/db/index.ts` — an explicit `sslmode=` in
+`DATABASE_URL` always wins; loopback/`db`/`localhost`/`::1` stay plain (docker-compose
+and CI); any other host is forced to TLS with `rejectUnauthorized:false`. The previous
+`NODE_ENV === "production"` rule broke both docker-compose and CI by demanding SSL
+against a plaintext socket.
 
 ### Session
 
 - `session.strategy:"jwt"` — stateless, no DB session table.
-- Cookie: `next-auth.session-token` **httpOnly**, set via `handlers` integration; rotation tied to `NEXTAUTH_SECRET`.
-- `getCurrentUserId()` (`src/lib/get-user.ts:3`) calls `auth()` and falls back to `"usr_brian_mwangi"` inside `try/catch` so public reads never 401. Transactional routes check for `!userId` → `401` explicitly (`like`, `comments`, `apply`, `join/leave`). Keep this split.
+- Cookie: `authjs.session-token` **httpOnly**, set via `handlers` integration; rotation tied to `NEXTAUTH_SECRET`.
+- Sign-in UI lives at `/signin` (App Router page), not `/api/auth/signin`.
+- Auth.js enforces CSRF on the credentials callback: a POST without the
+  `csrfToken` from `GET /api/auth/csrf` fails with `MissingCSRF` and issues no session.
 
 ### Env
 
 ```
-NEXTAUTH_SECRET=  ← 32+ random bytes — openssl rand -base64 32
+NEXTAUTH_SECRET=  ← 32+ random bytes — openssl rand -base64 48
 NEXTAUTH_URL=http://localhost:3000  (or https Vercel URL)
 ```
 
@@ -105,24 +138,25 @@ If `NEXTAUTH_SECRET` leaks, rotate (see §7).
 
 ---
 
-## 3. Rate Limiting — In-Memory vs Upstash
+## 3. Rate Limiting — Upstash REST with in-memory fallback
 
 **File**: `src/lib/ratelimit.ts`
 
 ```ts
-const store = new Map<Key, Entry>()   // key = route:ip, value {count, resetAt}
-export function rateLimit(key:string, limit:number, windowMs:number): RateLimitResult
-// cleanup every 5min via setInterval(...).unref()
-export function getClientIp(req:Request): string {
-  // x-forwarded-for[0] → x-real-ip → 127.0.0.1
+export async function rateLimit(key, limit, windowMs): Promise<RateLimitResult>
+// 1. Upstash REST /pipeline when UPSTASH_REDIS_REST_URL+TOKEN are set
+// 2. any failure / not configured -> in-process Map fallback (never fails the request)
+
+export function getClientIp(req: Request): string {
+  // x-vercel-forwarded-for[0] -> x-forwarded-for[LAST hop] -> x-real-ip -> 127.0.0.1
 }
 ```
 
-Every handler uses it:
+Every handler `await`s it:
 
 ```ts
 const ip = getClientIp(request)
-const rl = rateLimit(`like:${ip}`, 10, 60_000)
+const rl = await rateLimit(`like:${ip}`, 10, 60_000)
 if (!rl.success) return NextResponse.json(
   { error:"Rate limit ..." },
   { status:429, headers: { "Retry-After": String(Math.ceil((rl.reset-Date.now())/1000)) } }
@@ -131,57 +165,111 @@ if (!rl.success) return NextResponse.json(
 
 Limits are detailed in `API.md#rate-limit-summary` (tightest is `jobs:apply 5/min`).
 
+**Distributed mode** — when both `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
+are set, the limiter issues one HTTP pipeline call per request against Upstash:
+`SET key 0 PX <window> NX` (creates the window without refreshing a live one),
+`INCR`, `PTTL`. `count > limit` → `success:false`, so the same limits hold across
+serverless replicas and Docker scale-out. No Redis binary and no extra dependency.
+
+**Failure mode**: any non-OK response, network error, auth failure, or malformed
+payload is caught and the call falls back to the in-process store. A rate limiter
+misconfiguration degrades protection, it does not take the site down.
+
+**Header hygiene — read the LAST hop, not the first.** Proxies *append* the peer
+address they accepted the connection from, so the last `X-Forwarded-For` entry is the
+one written by the proxy directly in front of the app. The previous code read the
+**first** entry, which is client-supplied: an attacker could rotate `X-Forwarded-For`
+per request and walk through unlimited buckets, defeating every rate limit on the box.
+`x-vercel-forwarded-for` (set by the edge, never forwarded from the client) takes
+priority when present.
+
+> Caveat: if the app is exposed directly with no proxy, *all* of these headers are
+> attacker-controlled. Terminate TLS at a reverse proxy (or deploy on Vercel/Cloudflare)
+> before relying on IP rate limiting.
+
 **Properties**:
 
-- Zero dependency, O(1), isolated per route via namespaced key (`posts:create:${ip}`, `ai:${ip}`, etc).
-- `unref()` so it doesn't keep the Node process alive during tests.
-- Runs per-instance only — **not distributed**. On Vercel (multiple lambdas) or Docker replicas, one IP could bypass by hitting different instances.
+- O(1) per call, isolated per route via namespaced key (`posts:create:${ip}`, `ai:${ip}`, etc).
+- Memory-store cleanup runs on an `unref()`d interval so it doesn't keep Node alive during tests.
+- `src/lib/ratelimit.test.ts` covers window rollover, per-key isolation, Upstash
+  responses, and the last-hop IP derivation.
 
-**Upgrade to Upstash (multi-instance)** — environment `UPSTASH_REDIS_REST_URL/TOKEN` already validated in `src/lib/env.ts`:
+---
 
-```ts
-// Example swap in src/lib/ratelimit.ts (future)
-import { Ratelimit } from "@upstash/ratelimit"
-import { Redis } from "@upstash/redis"
-const redis = new Redis({ url: env.UPSTASH_REDIS_REST_URL!, token: env.UPSTASH_REDIS_REST_TOKEN! })
-export const redisLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "60s") })
-// Replace rateLimit() calls with await redisLimiter.limit(key)
-```
+### Login throttle — `src/lib/login-throttle.ts`
 
-Set `UPSTASH_REDIS_REST_URL/TOKEN` in Vercel env or Compose `app.environment`; serverless Redis works without running a Redis binary.
+`/api/auth/*` is the raw NextAuth router, so **none of the per-route limits above
+apply to sign-in**. `authorize()` in `src/lib/auth.ts` therefore runs every attempt
+through `runLoginAttempt(handle, ip, verify)`:
 
-**Header hygiene**: behind a reverse proxy, the app trusts `X-Forwarded-For`. Ensure the proxy (Caddy/nginx/Vercel) strips client-injected `X-Forwarded-For` so an attacker can't spoof IP. Vercel already does; custom nginx must `proxy_set_header X-Forwarded-For $remote_addr;`.
+| Bucket | Limit | Window |
+|--------|-------|--------|
+| `login:handle:<handle>` | 10 failures | 15 min |
+| `login:ip:<ip>` | 30 failures | 15 min |
+
+- The verifier (`bcrypt.compare`) is **never called** once either bucket is full, so
+  a locked account costs an attacker no less work than an open one.
+- Rejections are counted **whether or not the handle exists**. If unknown handles
+  were skipped, a handle that never locks would itself be an enumeration oracle.
+- Either bucket full → `authorize()` returns `null`. The response is the same
+  generic `Invalid handle or password.` as any other failure, so the client cannot
+  distinguish a locked account from a wrong password; only the server logs
+  `[auth] sign-in refused for "<handle>" from <ip>: failure limit reached`.
+- A successful sign-in clears **both** buckets for that handle and IP.
+- Uses the same Upstash/in-memory split as the rest of §3, so the lockout holds
+  across replicas once Redis is configured; a limiter outage degrades protection
+  instead of taking sign-in down.
+
+**Verified**: `src/lib/login-throttle.test.ts` covers both buckets, the
+enumeration-oracle property, that the verifier is skipped once locked, and that a
+valid password still fails while locked. The runtime suite in `/tmp/opencode/verify.sh`
+locks a seeded account end to end and asserts that unrelated accounts from the same
+IP still sign in.
 
 ---
 
 ## 4. `POST /api/seed` Protection
 
-**File**: `src/app/api/seed/route.ts:10`
+**File**: `src/app/api/seed/route.ts`
 
-Seed is **write + idempotent** → needs guarding beyond rate limit.
+Seed is **write + idempotent** → needs guarding beyond rate limit, and it fails closed
+rather than open-by-omission.
 
 ```ts
-function checkSeedSecret(request:Request): NextResponse|null {
+function checkSeedSecret(request: Request): NextResponse | null {
   const seedSecret = process.env.SEED_SECRET
-  if (seedSecret) {
-    const provided = request.headers.get("x-seed-secret")
-    if (!provided || provided !== seedSecret) return NextResponse.json(
-      { success:false, error:"Unauthorized: invalid or missing x-seed-secret" }, { status:401 }
-    )
-  }
+  // Unset or empty -> seeding is disabled outright (503), not "allowed because
+  // nobody configured a secret".
+  if (!seedSecret) return NextResponse.json(
+    { success:false, error:"Seeding is disabled: SEED_SECRET is not configured." }, { status:503 }
+  )
+  const provided = request.headers.get("x-seed-secret") ?? ""
+  // Timing-safe: a plain !== leaks prefix information under load.
+  const ok = provided.length === seedSecret.length &&
+             timingSafeEqual(Buffer.from(provided), Buffer.from(seedSecret))
+  if (!ok) return NextResponse.json(
+    { success:false, error:"Unauthorized: invalid or missing x-seed-secret" }, { status:401 }
+  )
   return null
 }
 ```
 
-- When `SEED_SECRET` is set, **only** `POST /api/seed` enforces `x-seed-secret`; `GET /api/seed` is deprecated (logs `console.warn`).
+- Both `POST` and `GET /api/seed` run the same gate — the old "GET is deprecated but
+  still works without a secret" path was an authentication bypass and is gone.
 - Rate limit: `seed:${ip} 3/min`.
-- Idempotent gate: `SELECT * FROM users LIMIT 1` → only inserts when empty.
+- Idempotent gate: `SELECT * FROM users LIMIT 1` → only inserts when empty, guarded by
+  a module-level in-flight promise so concurrent readers don't stampede.
+- Production `ensureSeeded()` (the implicit auto-seed on empty tables) returns early
+  unless `AUTO_SEED=true`, so an empty production DB fails loudly instead of being
+  silently populated from demo fixtures.
 
 **Ops guidance**:
 
-- In production, always set a random `SEED_SECRET` (e.g. `openssl rand -hex 32`) and keep it out of client bundles.
+- Always set a random `SEED_SECRET` (e.g. `openssl rand -hex 32`) and keep it out of client bundles.
+- `SEED_PASSWORD` must also be set if you want the seeded accounts to be able to log in;
+  it is bcrypt-hashed into `users.password_hash` and never stored or logged in plaintext.
 - Seed once after `drizzle-kit migrate` → `curl -X POST https://.../api/seed -H "x-seed-secret: $SEED_SECRET"`.
-- Do not expose `SEED_SECRET` as `NEXT_PUBLIC_*`.
+- Do not expose `SEED_SECRET` or `SEED_PASSWORD` as `NEXT_PUBLIC_*`.
 
 ---
 
@@ -352,6 +440,7 @@ await db.transaction(async (tx) => {
 | bcrypt + `passwordHash` on `users` | TODO | Before opening sign-up |
 | Upstash/Redis sliding-window rate limiting | Ready (env present) | When second replica / Vercel skew > 1 instance |
 | HSTS + full CSP headers | Draft in §6 | Add to `next.config.ts` |
+| Per-handle / per-IP credential lockout | Done — `src/lib/login-throttle.ts` | Before public launch, add captcha or email unlock (see §3 residual risk) |
 | Sentry integration | Env present | Wire `SENTRY_DSN` + `instrumentation.ts` Sentry init |
 | `pg_stat_statements` + slow-query logs | TODO | After prod traffic |
 | Row-level security (RLS) if switching to Supabase direct queries | TODO | If exposing DB via REST |

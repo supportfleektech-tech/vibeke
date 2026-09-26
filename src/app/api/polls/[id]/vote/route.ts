@@ -33,7 +33,7 @@ export async function POST(
     const ip = getClientIp(request);
     const userId = await getCurrentUserId();
     const rlKey = userId ? `polls:vote:${userId}` : `polls:vote:${ip}`;
-    const rl = rateLimit(rlKey, 10, 60_000);
+    const rl = await rateLimit(rlKey, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 votes per minute." },

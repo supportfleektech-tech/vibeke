@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { clips, hashtags, users } from "@/db/schema";
 import { desc, eq, and, sql, inArray } from "drizzle-orm";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 import { rateLimit, getClientIp } from "@/lib/ratelimit";
 import { getCurrentUserId } from "@/lib/get-user";
 import { follows } from "@/db/schema";
@@ -25,7 +25,7 @@ const clipCreateSchema = z.object({
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`clips:list:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`clips:list:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 requests per minute." },
@@ -122,12 +122,12 @@ export async function GET(request: Request) {
         // Seed only once; check posts/users as indicator as well
         const postCheck = await db.select().from(users).limit(1);
         if (postCheck.length === 0) {
-          await seedDatabase();
+          await ensureSeeded();
         } else {
           // users exist but clips empty — seed will skip due to existing users; insert minimal clips fallback is handled inside seed or we just re-query
           // Try calling seed anyway (no-op if users exist) then re-query
           try {
-            await seedDatabase();
+            await ensureSeeded();
           } catch {}
         }
         // Re-query after seed attempt
@@ -165,7 +165,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`clips:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`clips:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 clips per minute." },

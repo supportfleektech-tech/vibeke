@@ -1,0 +1,34 @@
+# Build output
+.next/
+out/
+build/
+dist/
+node_modules/
+public/sw.js
+public/workbox-*.js
+
+# Generated / vendored
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+drizzle/
+next-env.d.ts
+*.min.js
+*.min.css
+coverage/
+playwright-report/
+test-results/
+
+# Data & media
+public/
+*.svg
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.ico
+*.woff*
+
+# Docs that are hand-maintained prose
+CHANGELOG.md
+follow-up-vibeke.md

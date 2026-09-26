@@ -47,10 +47,17 @@ export function KinaraAICopilot({ user, selectedCity }: KinaraAICopilotProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "copilot", text: textToSend }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: data?.error || "Kinara Edge AI is unavailable right now.", time: "Just now" },
+        ]);
+        return;
+      }
       const aiReply = {
         sender: "ai" as const,
-        text: data.result || "Synthesizing answer from Kinara Sovereign index.",
+        text: data?.result || "No synthesis returned.",
         time: "Just now",
       };
       setMessages((prev) => [...prev, aiReply]);

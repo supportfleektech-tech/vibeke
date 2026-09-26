@@ -129,7 +129,7 @@ async function callOpenRouter(
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`ai:${ip}`, 20, 60_000);
+    const rl = await rateLimit(`ai:${ip}`, 20, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon. (20/min)" },

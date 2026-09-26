@@ -35,3 +35,11 @@ logs
 
 # vercel
 .vercel
+
+# playwright
+/playwright-report/
+/test-results/
+
+# next-pwa build artifacts (public/sw.js is tracked; its siblings are regenerated each build)
+/public/workbox-*.js*
+/public/sw.js.map

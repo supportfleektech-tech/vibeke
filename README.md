@@ -161,7 +161,7 @@ All 7 integrate into `DynamicHome` stories+clips peek + `Sidebar` 7 new nav `Cli
 | **Framework** | **Next.js 16.2** (App Router, RSC, `next/font`) | SSR + streaming (`loading.tsx`), route handlers, image optimization (AVIF/WebP) |
 | **UI** | **React 19.2**, Tailwind CSS 4.1, `motion` 13, `lucide-react`, `sonner`, `@dnd-kit` | Premium motion + DnD dashboard; `@tailwindcss/postcss` |
 | **State/Data** | **SWR 2.5** + `fetcher` | 8 parallel endpoints in `page.tsx`, `dedupingInterval: 60000`, optimistic local sync |
-| **Auth** | **Auth.js 5 (next-auth beta 32)** — Credentials + JWT | Zero-budget, sovereign demo (`usr_brian_mwangi`), JWT callbacks with `trustScore` |
+| **Auth** | **Auth.js 5 (next-auth beta 32)** — Credentials + JWT | Real credential check: bcrypt hash lookup per handle, no bypass identity; JWT callbacks with `trustScore` |
 | **DB** | **Postgres 16**, **Drizzle ORM 0.45** + `drizzle-kit` 0.31, `pg` 8.20 (pool max 10) | Typed queries, indexed filters, `pool` singleton, health `SELECT 1` latency |
 | **Validation** | **Zod 4.6** | Every API boundary (`zod` schemas in `src/lib/validators.ts`) |
 | **Maps** | **Leaflet 1.9 + react-leaflet 5** | Free OSM tiles, no vendor lock-in; Mapbox optional |
@@ -228,10 +228,11 @@ pnpm db:migrate        # or: pnpm db:push (drizzle-kit push — dev only)
 # but you can also seed explicitly:
 curl -X POST http://localhost:3000/api/seed \
   -H "x-seed-secret: kinara-seed-local-only"
-
-# Alternatively without secret if SEED_SECRET not set:
-curl http://localhost:3000/api/seed
 ```
+
+`SEED_SECRET` is **required**: with it unset the endpoint answers `503`, and a wrong
+or missing `x-seed-secret` always answers `401` — there is no unauthenticated path,
+including `GET /api/seed`.
 
 ### 5. Run
 
@@ -257,12 +258,13 @@ All variables validated in `src/lib/env.ts:4` (Zod). Missing keys degrade gracef
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
 | `DATABASE_URL` | ✅ | `postgresql://postgres:postgres@127.0.0.1:5432/kinara_db` | Postgres connection string (Neon/Supabase/Vercel Postgres or local) |
-| `NEXTAUTH_SECRET` | ✅ (prod) | `dev-secret-kinara-32-chars-minimum-for-testing` | JWT signing — `openssl rand -base64 32` |
+| `NEXTAUTH_SECRET` | ✅ (prod) | — (random per process in dev) | JWT signing. Prod refuses to boot without a ≥32-char value outside the known-placeholder denylist — `openssl rand -base64 48` |
 | `NEXTAUTH_URL` | Recommended | `http://localhost:3000` | Canonical URL (also sets OpenRouter `HTTP-Referer`) |
 | `OPENROUTER_API_KEY` | Optional | — | OpenRouter key (preferred AI provider) — https://openrouter.ai/keys |
 | `OPENAI_API_KEY` | Optional | — | OpenAI direct fallback (if no OpenRouter key) |
 | `AI_MODEL` | Optional | `openai/gpt-4o-mini` | Model ID (free tier: `meta-llama/llama-3.1-8b:free`) |
-| `SEED_SECRET` | Optional | `kinara-seed-local-only` | Protects `POST /api/seed` (`x-seed-secret` header) |
+| `SEED_SECRET` | ✅ | — | Protects `POST /api/seed` (`x-seed-secret` header). Unset → seed endpoint returns 503 |
+| `SEED_PASSWORD` | ✅ (to seed logins) | — | Password hashed (bcrypt) into every seeded account. Unset → seeded rows have no hash and cannot log in |
 | `UPSTASH_REDIS_REST_URL` | Optional | — | Upstash Redis REST URL (if set, can Back in-memory limiter) |
 | `UPSTASH_REDIS_REST_TOKEN` | Optional | — | Upstash token |
 | `SENTRY_DSN` | Optional | — | Sentry DSN |
@@ -362,9 +364,9 @@ page.tsx (use client)
 
 Key decisions:
 - **Leaflet/OSM**: free, no key, sovereign — Mapbox optional upgrade.
-- **Auth.js Credentials + JWT**: zero-budget sovereign demo; swap `authorize()` for `bcrypt` + DB lookup in production.
+- **Auth.js Credentials + JWT**: `authorize()` already does the DB lookup — `bcrypt.compare` against `users.password_hash`, and a row with no hash cannot log in at all. There is no demo/admin identity that skips verification.
 - **`jsonb` for skills/achievements/tags/services/participants/metadata**: flexible without extra join tables; indexed via GIN if needed later.
-- **In-memory rate limiter** (`Map` + 5-min GC): zero dependency, sufficient for single instance; Upstash Redis swap for multi-instance (see `SECURITY.md`).
+- **Async rate limiter**: Upstash Redis REST when `UPSTASH_REDIS_REST_URL`+`TOKEN` are set (shared across replicas), in-process `Map` otherwise — any Upstash failure degrades to memory instead of failing the request (see `SECURITY.md`).
 - **Denormalized `posts.authorName/handle/avatar/trust`**: fast feed reads, no join per row.
 - **Transactions for likes/comments/escrow/join**: atomic counts + race-safe unique violations.
 
@@ -474,7 +476,7 @@ Optimized for Kenya's network reality (2G edge, 120ms local vectors, sub-100ms o
    # locally with production DATABASE_URL:
    pnpm db:migrate
    curl -X POST https://your-app.vercel.app/api/seed -H "x-seed-secret: $SEED_SECRET"
-   # or if SEED_SECRET empty: curl https://your-app.vercel.app/api/seed
+   # SEED_SECRET is required — an empty value returns 503, never an open endpoint
    ```
 5. Verify: `curl https://your-app.vercel.app/api/health` → `{ ok:true }`
 
@@ -503,12 +505,34 @@ pnpm test          # vitest run (jsdom, globals, src/**/*.{test,spec}.ts(x))
 pnpm test:watch    # vitest watch
 pnpm test:coverage # with coverage
 pnpm build         # next build (also typechecks)
-pnpm format        # prettier --write .
+pnpm format        # prettier --write .   (on demand — see note below)
+pnpm test:e2e      # playwright, browser-driven (see note below)
 ```
 
-CI (`.github/workflows/ci.yml`) runs **lint → typecheck → test → build → health check** on every push/PR.
+**Prettier** is kept as a dependency and `pnpm format` still works, but there is no
+`format:check` gate and the repository is *not* uniformly formatted — running
+`pnpm format` today would rewrite ~110 files. Reformatting the whole tree would bury
+every real diff under whitespace noise, so it is deferred to a dedicated formatting
+PR of its own. Lint/typecheck/tests are the enforced gates.
 
-Existing suites: `src/lib/validators.test.ts`, `src/lib/ratelimit.test.ts`, `src/components/ui/button.test.tsx`; add new specs under `src/**/*.{test,spec}.{ts,tsx}`.
+**E2E** (`pnpm test:e2e`) drives a real browser against a migrated + seeded database:
+run `pnpm db:migrate` and `POST /api/seed` first, and make sure `SEED_PASSWORD` is set
+(it is read from `.env.local` by `playwright.config.ts`). Playwright reuses a server
+already listening on port 3000, otherwise it starts `pnpm dev --webpack`.
+It is **not** wired into CI — it needs a browser install and a seeded database, and
+the workflow's smoke checks already cover the same HTTP contracts server-side.
+`playwright.config.ts` keeps `fullyParallel: false` so the wrong-password case in
+`e2e/auth.spec.ts` always runs before a successful sign-in that clears its throttle
+counter — otherwise enough reruns would lock the seeded account.
+
+CI (`.github/workflows/ci.yml`) runs **lint → typecheck → migrate → unit tests → build →
+7-check smoke** (health, seed auth, anonymous 401s, credential sign-in, admin/citizen
+authorization, privilege-escalation rejection, rate limit) on every push/PR.
+
+Existing suites: `src/lib/validators.test.ts`, `src/lib/ratelimit.test.ts`,
+`src/lib/login-throttle.test.ts`, `src/components/ui/button.test.tsx`, plus
+`e2e/smoke.spec.ts` and `e2e/auth.spec.ts`; add new specs under
+`src/**/*.{test,spec}.{ts,tsx}`.
 
 ---
 
@@ -537,7 +561,7 @@ Existing suites: `src/lib/validators.test.ts`, `src/lib/ratelimit.test.ts`, `src
 3. **E2E Smoke** Playwright 5 specs (`pnpm test:e2e` — to be added) + **Sentry** DSN + **Vercel Analytics** — already deps: `@vercel/analytics`
 4. **Backup cron** `pg_dump` daily → `backups/`
 
-**Next:** Real Auth (`bcrypt` swap in `src/lib/auth.ts:28`), Daraja STK payments (`POST /api/webhooks/mpesa`), Uploads (Vercel Blob), Realtime (`socket.io`), `pg_trgm` Search v2, PWA offline — see `ROADMAP.md:1.x`.
+**Next:** Daraja STK payments (`POST /api/webhooks/mpesa`), Uploads (Vercel Blob), Realtime (`socket.io`), `pg_trgm` Search v2, PWA offline — see `ROADMAP.md:1.x`.
 
 > **Build note:** `package.json` now uses `next build --webpack` + `next dev --webpack` (Turbopack blocked by `next-auth@beta` — `build:turbo` keeps `--turbopack` for when resolved). `pnpm dev` / `pnpm build` already handle the flag.
 

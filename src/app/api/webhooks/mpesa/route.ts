@@ -20,7 +20,7 @@ const mpesaWebhookSchema = z.object({
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`webhooks:mpesa:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`webhooks:mpesa:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 30 requests per minute." },

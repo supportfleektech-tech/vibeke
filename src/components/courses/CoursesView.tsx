@@ -177,7 +177,6 @@ export function CoursesView() {
             return (
               <div key={course.id} className="kinara-card rounded-2xl overflow-hidden border border-white/[0.06] flex flex-col group">
                 <div className="relative h-40 w-full overflow-hidden bg-black">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   {course.banner ? (
                     <Image
                       src={course.banner}

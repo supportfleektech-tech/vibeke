@@ -44,7 +44,7 @@ const markReadBodySchema = z.object({
 export async function GET(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`notifications:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`notifications:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`notifications:create:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`notifications:create:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -196,7 +196,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`notifications:read:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`notifications:read:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },

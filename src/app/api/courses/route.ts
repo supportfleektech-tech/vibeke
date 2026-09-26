@@ -83,7 +83,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`courses:create:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`courses:create:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 10 requests per minute." },

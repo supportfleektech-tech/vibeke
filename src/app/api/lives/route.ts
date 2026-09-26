@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { lives, users } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
-import { seedDatabase } from "@/db/seed";
+import { ensureSeeded } from "@/db/seed";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   try {
     const { rateLimit, getClientIp } = await import("@/lib/ratelimit");
     const ip = getClientIp(request);
-    const rl = rateLimit(`lives:get:${ip}`, 30, 60_000);
+    const rl = await rateLimit(`lives:get:${ip}`, 30, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again soon." },
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     // Seed check
     const check = await db.select().from(lives).limit(1);
     if (check.length === 0) {
-      await seedDatabase();
+      await ensureSeeded();
     }
 
     let result: (typeof lives.$inferSelect)[];
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     const { getCurrentUserId } = await import("@/lib/get-user");
 
     const ip = getClientIp(request);
-    const rl = rateLimit(`lives:create:${ip}`, 5, 60_000);
+    const rl = await rateLimit(`lives:create:${ip}`, 5, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 5 go-live per minute." },

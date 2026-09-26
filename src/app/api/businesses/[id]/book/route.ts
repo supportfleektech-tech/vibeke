@@ -14,7 +14,7 @@ export async function POST(
 ) {
   try {
     const ip = getClientIp(request);
-    const rl = rateLimit(`businesses:book:${ip}`, 10, 60_000);
+    const rl = await rateLimit(`businesses:book:${ip}`, 10, 60_000);
     if (!rl.success) {
       return NextResponse.json(
         { success: false, error: "Rate limit exceeded. Try again soon." },
@@ -40,6 +40,9 @@ export async function POST(
     }
 
     const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const bookingRef = `BK-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const bookingId = crypto.randomUUID();
 
